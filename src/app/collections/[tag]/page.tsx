@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Dancing_Script } from "next/font/google";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { initializeApp, getApps } from "firebase/app";
 import { getFirestore, collection, getDocs, query, where, collectionGroup, getDoc, doc, setDoc } from "firebase/firestore";
 import { getAuth, onAuthStateChanged, User } from "firebase/auth";
@@ -13,6 +13,7 @@ import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 const dancingScript = Dancing_Script({ subsets: ["latin"] });
 import { db, auth, storage } from "@/lib/firebase";
 import { useCart } from "@/context/CartContext";
+import { useWishlist } from "@/context/WishlistContext";
 import { useAdmin } from "@/context/AdminContext";
 import { Product } from "@/lib/types";
 
@@ -21,9 +22,12 @@ const SIZE_OPTIONS = ["XS", "S", "M", "L", "Other"];
 const LENGTH_OPTIONS = ["XS", "S", "M", "L", "XL", "Other"];
 
 import ItemPickerModal from "@/components/ItemPickerModal";
+import ProductLightbox from "@/components/ProductLightbox";
+import ShapeSizingGuideModal from "@/components/ShapeSizingGuideModal";
 
-export default function CollectionPage() {
+function CollectionPageContent() {
   const params = useParams();
+  const searchParams = useSearchParams();
   // Ensure we safely handle array params or string params
   const rawTag = Array.isArray(params?.tag) ? params.tag[0] : params?.tag;
   const tag = rawTag ? decodeURIComponent(rawTag) : "";
@@ -37,6 +41,7 @@ export default function CollectionPage() {
   const [showItemPicker, setShowItemPicker] = useState(false);
   const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
   const [itemToRemove, setItemToRemove] = useState<Product | null>(null);
+  const [dismissedHighlightId, setDismissedHighlightId] = useState<string | null>(null);
 
   // Drawer state
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -44,7 +49,16 @@ export default function CollectionPage() {
   const [selectedSize, setSelectedSize] = useState<string>("M");
   const [selectedLength, setSelectedLength] = useState<string>("Medium");
   const [selectedQuantity, setSelectedQuantity] = useState<number>(1);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [showShapeGuide, setShowShapeGuide] = useState(false);
+
+  const openLightbox = (idx: number = 0) => {
+    setLightboxIndex(idx);
+    setLightboxOpen(true);
+  };
   const { addToCart } = useCart();
+  const { isWishlisted, toggleWishlist } = useWishlist();
   const { editMode, setEditingProduct } = useAdmin();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [clientProfile, setClientProfile] = useState<any>(null);
@@ -68,6 +82,121 @@ export default function CollectionPage() {
     }
   };
 
+  // Find target product from query params (?product=..., ?name=..., ?img=...) or URL hash
+  const prodQuery = searchParams.get("product");
+  const nameQuery = searchParams.get("name");
+  const imgQuery = searchParams.get("img");
+
+  const targetProduct = useMemo(() => {
+    if (!products || products.length === 0) return null;
+    const hashTarget = typeof window !== 'undefined' ? window.location.hash.replace('#product-', '').replace('#', '') : '';
+    const idTarget = prodQuery || hashTarget;
+
+    if (!idTarget && !nameQuery && !imgQuery) return null;
+
+    return products.find(p => {
+      // 1. Check ID or syncId
+      if (idTarget) {
+        const t = idTarget.toLowerCase();
+        if (p.id?.toLowerCase() === t || p.syncId?.toLowerCase() === t) return true;
+        if (p.syncId && t.includes(p.syncId.toLowerCase())) return true;
+        if (p.id && t.includes(p.id.toLowerCase())) return true;
+      }
+      // 2. Check Name (case-insensitive & trimmed)
+      if (nameQuery) {
+        if (p.name?.trim().toLowerCase() === nameQuery.trim().toLowerCase()) return true;
+      }
+      // 3. Check Image URL or filename
+      if (imgQuery) {
+        if (p.imagePath === imgQuery) return true;
+        if (p.additionalImages?.includes(imgQuery)) return true;
+        const filename = imgQuery.split('/').pop()?.split('?')[0];
+        if (filename && p.imagePath?.includes(filename)) return true;
+      }
+      return false;
+    }) || null;
+  }, [products, prodQuery, nameQuery, imgQuery]);
+
+  // Ensure active filters do not hide the targeted item from wishlist
+  useEffect(() => {
+    if (targetProduct && activeFilters.length > 0) {
+      const matchesFilter = activeFilters.some(f => targetProduct.tags?.includes(f));
+      if (!matchesFilter) {
+        setActiveFilters([]);
+      }
+    }
+  }, [targetProduct, activeFilters]);
+
+  // When opened with a target wishlist product, start at top so the scroll down is visible
+  useEffect(() => {
+    if (prodQuery || nameQuery || imgQuery) {
+      window.scrollTo(0, 0);
+    }
+  }, [prodQuery, nameQuery, imgQuery]);
+
+  // Smooth animated scroll with cubic easing for a visible, professional glide down
+  const smoothScrollToTarget = useCallback(() => {
+    if (!targetProduct) return;
+    const el = document.getElementById(`product-${targetProduct.id}`);
+    if (!el) return;
+
+    const rect = el.getBoundingClientRect();
+    const currentScrollY = window.pageYOffset || document.documentElement.scrollTop;
+    const targetY = Math.max(0, rect.top + currentScrollY - (window.innerHeight / 2) + (rect.height / 2));
+
+    const distance = targetY - currentScrollY;
+    if (Math.abs(distance) < 20) return;
+
+    // Duration scales with distance for natural pacing (850ms - 1200ms)
+    const duration = Math.min(1200, Math.max(850, Math.abs(distance) * 0.45));
+    const startTime = performance.now();
+
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // easeInOutCubic curve: gentle takeoff, fast mid-scroll, silky-smooth slowdown
+      const ease = progress < 0.5 
+        ? 4 * progress * progress * progress 
+        : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+
+      window.scrollTo(0, currentScrollY + distance * ease);
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+
+    requestAnimationFrame(animate);
+  }, [targetProduct]);
+
+  useEffect(() => {
+    if (loading || !targetProduct) return;
+
+    // Give 380ms for collection products to mount into the DOM, then glide smoothly down
+    const scrollTimer = setTimeout(() => {
+      smoothScrollToTarget();
+    }, 380);
+
+    // Secondary safety adjustment in case late image loading shifted the grid
+    const adjustTimer = setTimeout(() => {
+      const el = document.getElementById(`product-${targetProduct.id}`);
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        const currentCenter = rect.top + (rect.height / 2);
+        const windowCenter = window.innerHeight / 2;
+        if (Math.abs(currentCenter - windowCenter) > 60) {
+          smoothScrollToTarget();
+        }
+      }
+    }, 1500);
+
+    return () => {
+      clearTimeout(scrollTimer);
+      clearTimeout(adjustTimer);
+    };
+  }, [loading, targetProduct, smoothScrollToTarget]);
+
   useEffect(() => {
     if (!tag) return;
     fetchCollectionData();
@@ -88,14 +217,14 @@ export default function CollectionPage() {
       } else {
         // Fallback default info if no custom splashback is set
         let fallbackTitle = tag.charAt(0).toUpperCase() + tag.slice(1).replace(/-/g, " ");
-        let fallbackDesc = `Explore our gorgeous ${tag.replace(/-/g, " ")} collection.`;
+        let fallbackDesc = `Explore the gorgeous ${tag.replace(/-/g, " ")} collection.`;
         
         if (tag === "special-offers") {
           fallbackTitle = "Special Offers";
-          fallbackDesc = "Check out our latest deals and promos!";
+          fallbackDesc = "Check out the latest deals and promos!";
         } else if (tag === "all") {
           fallbackTitle = "All Designs";
-          fallbackDesc = "Browse our entire collection of custom press-ons.";
+          fallbackDesc = "Browse my entire collection of handcrafted press-ons.";
         }
 
         currentSettings = {
@@ -528,50 +657,80 @@ export default function CollectionPage() {
                   }
                 }
                 return displayed;
-              })().map((product, index) => (
-                <div 
-                  key={product.id} 
-                  draggable={editMode && sortOption === 'newest' && activeFilters.length === 0}
-                  onDragStart={(e) => {
-                    if (editMode && sortOption === 'newest' && activeFilters.length === 0) {
-                      setDraggedItemIndex(index);
-                      e.dataTransfer.effectAllowed = "move";
-                    }
-                  }}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    if (draggedItemIndex === null || draggedItemIndex === index) return;
-                    if (editMode && sortOption === 'newest' && activeFilters.length === 0) {
-                      setProducts(prev => {
-                        const newProducts = [...prev];
-                        const item = newProducts[draggedItemIndex];
-                        if (!item) return prev;
-                        newProducts.splice(draggedItemIndex, 1);
-                        newProducts.splice(index, 0, item);
-                        return newProducts;
-                      });
-                      setDraggedItemIndex(index);
-                    }
-                  }}
-                  onDragEnd={async () => {
-                    setDraggedItemIndex(null);
-                    if (editMode && sortOption === 'newest' && activeFilters.length === 0) {
-                      const newOrder = products.map(p => p.id);
-                      const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
-                      
-                      // Save to the appropriate array (includedProductIds for custom collections, itemOrder for core tags)
-                      const isCoreTag = ['sets', 'minis', 'keychains', 'earrings', 'accessories', 'basics', 'special-offers'].includes(tag.toLowerCase()) || tag === 'all';
-                      if (!isCoreTag) {
-                        await setDoc(doc(db, "users", vendorUid, "collection_settings", tag), { includedProductIds: newOrder }, { merge: true });
-                        setCollectionInfo((prev: any) => ({...prev, includedProductIds: newOrder}));
-                      } else {
-                        await setDoc(doc(db, "users", vendorUid, "collection_settings", tag), { itemOrder: newOrder }, { merge: true });
-                        setCollectionInfo((prev: any) => ({...prev, itemOrder: newOrder}));
+              })().map((product, index) => {
+                const isHighlighted = Boolean(
+                  targetProduct && targetProduct.id === product.id && dismissedHighlightId !== product.id
+                );
+
+                return (
+                  <div 
+                    key={product.id} 
+                    id={`product-${product.id}`}
+                    data-product-id={product.id}
+                    draggable={editMode && sortOption === 'newest' && activeFilters.length === 0}
+                    onDragStart={(e) => {
+                      if (editMode && sortOption === 'newest' && activeFilters.length === 0) {
+                        setDraggedItemIndex(index);
+                        e.dataTransfer.effectAllowed = "move";
                       }
-                    }
-                  }}
-                  className={`bg-white/95 backdrop-blur-md rounded-2xl p-3 shadow-2xl border ${editMode ? 'border-pink-500 ring-2 ring-pink-500/20 cursor-grab active:cursor-grabbing' : 'border-white/20'} flex flex-col group relative transform transition-all hover:-translate-y-1 ${draggedItemIndex === index ? 'opacity-50 scale-95' : ''}`}
-                >
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      if (draggedItemIndex === null || draggedItemIndex === index) return;
+                      if (editMode && sortOption === 'newest' && activeFilters.length === 0) {
+                        setProducts(prev => {
+                          const newProducts = [...prev];
+                          const item = newProducts[draggedItemIndex];
+                          if (!item) return prev;
+                          newProducts.splice(draggedItemIndex, 1);
+                          newProducts.splice(index, 0, item);
+                          return newProducts;
+                        });
+                        setDraggedItemIndex(index);
+                      }
+                    }}
+                    onDragEnd={async () => {
+                      setDraggedItemIndex(null);
+                      if (editMode && sortOption === 'newest' && activeFilters.length === 0) {
+                        const newOrder = products.map(p => p.id);
+                        const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+                        
+                        // Save to the appropriate array (includedProductIds for custom collections, itemOrder for core tags)
+                        const isCoreTag = ['sets', 'minis', 'keychains', 'earrings', 'accessories', 'basics', 'special-offers'].includes(tag.toLowerCase()) || tag === 'all';
+                        if (!isCoreTag) {
+                          await setDoc(doc(db, "users", vendorUid, "collection_settings", tag), { includedProductIds: newOrder }, { merge: true });
+                          setCollectionInfo((prev: any) => ({...prev, includedProductIds: newOrder}));
+                        } else {
+                          await setDoc(doc(db, "users", vendorUid, "collection_settings", tag), { itemOrder: newOrder }, { merge: true });
+                          setCollectionInfo((prev: any) => ({...prev, itemOrder: newOrder}));
+                        }
+                      }
+                    }}
+                    className={`bg-white/95 backdrop-blur-md rounded-2xl p-3 shadow-2xl border flex flex-col group relative transform transition-all ${
+                      isHighlighted
+                        ? 'border-pink-500 ring-4 ring-pink-500/60 shadow-[0_0_35px_rgba(236,72,153,0.45)] scale-[1.03] z-20'
+                        : editMode
+                        ? 'border-pink-500 ring-2 ring-pink-500/20 cursor-grab active:cursor-grabbing hover:-translate-y-1'
+                        : 'border-white/20 hover:-translate-y-1'
+                    } ${draggedItemIndex === index ? 'opacity-50 scale-95' : ''}`}
+                  >
+                    {isHighlighted && (
+                      <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-pink-500 via-rose-500 to-pink-600 text-white text-[11px] font-black px-3.5 py-1 rounded-full shadow-lg z-30 flex items-center gap-1.5 animate-bounce whitespace-nowrap">
+                        <span>❤️</span>
+                        <span>From Your Wishlist</span>
+                        <button 
+                          type="button" 
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            setDismissedHighlightId(product.id); 
+                          }} 
+                          className="ml-1 opacity-75 hover:opacity-100 text-xs font-bold leading-none cursor-pointer"
+                          title="Dismiss highlight"
+                        >
+                          &times;
+                        </button>
+                      </div>
+                    )}
                   {editMode && (
                     <div className="absolute top-4 right-4 flex gap-1 z-20">
                       <button onClick={() => setEditingProduct(product)} className="bg-black text-white px-3 py-1.5 rounded-full text-[10px] font-bold hover:bg-neutral-800 shadow-md">✏️ EDIT</button>
@@ -587,11 +746,52 @@ export default function CollectionPage() {
                       </button>
                     </div>
                   )}
-                  {product.isPromo && (
+                  {!editMode && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          toggleWishlist(product);
+                        }}
+                        className={`absolute top-3 right-3 z-20 w-8 h-8 rounded-full flex items-center justify-center transition-all backdrop-blur-md cursor-pointer ${
+                          isWishlisted(product.id)
+                            ? 'bg-pink-500 text-white shadow-md scale-105'
+                            : 'bg-white/80 text-neutral-600 hover:text-pink-500 hover:bg-white shadow-sm'
+                        }`}
+                        title={isWishlisted(product.id) ? "Remove from wishlist" : "Save to wishlist"}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={isWishlisted(product.id) ? "currentColor" : "none"} stroke="currentColor" strokeWidth={isWishlisted(product.id) ? 0 : 2} className="w-4 h-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+                        </svg>
+                      </button>
+                    )}
+                    {product.isPromo && (
                     <div className="absolute top-4 left-4 bg-pink-500 text-white text-[9px] font-bold px-2.5 py-1 rounded-full z-10 shadow-sm uppercase tracking-wider">PROMO</div>
                   )}
-                  <div className="relative aspect-square overflow-hidden rounded-xl bg-pink-50 cursor-pointer" onClick={() => !editMode && openDrawer(product)}>
-                    <Image src={product.imagePath} alt={product.name} fill className="object-cover transition-transform duration-500 ease-out group-hover:scale-105" sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw" />
+                  <div className="relative aspect-square overflow-hidden rounded-xl bg-pink-50 cursor-pointer group/cardimg" onClick={() => !editMode && openDrawer(product)}>
+                    <Image 
+                      src={product.imagePath} 
+                      alt={product.name} 
+                      fill 
+                      className={`object-cover transition-all duration-500 ease-out group-hover:scale-105 ${product.additionalImages && product.additionalImages.length > 0 ? 'lg:group-hover:opacity-0' : ''}`} 
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw" 
+                    />
+                    {product.additionalImages && product.additionalImages.length > 0 && (
+                      <Image 
+                        src={product.additionalImages[0]} 
+                        alt={`${product.name} alternate angle`} 
+                        fill 
+                        className="object-cover transition-all duration-500 ease-out opacity-0 lg:group-hover:opacity-100 lg:group-hover:scale-105" 
+                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw" 
+                      />
+                    )}
+                    {product.additionalImages && product.additionalImages.length > 0 && (
+                      <div className="absolute bottom-2 right-2 z-10 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 lg:hidden">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>
+                        <span>{product.additionalImages.length + 1}</span>
+                      </div>
+                    )}
                     {editMode && product.tags && product.tags.length > 0 && (
                       <div className="absolute bottom-2 left-2 right-2 flex flex-wrap gap-1 z-10">
                         {product.tags.map(t => <span key={t} className="bg-black/70 backdrop-blur-md text-white text-[9px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">{t}</span>)}
@@ -610,7 +810,8 @@ export default function CollectionPage() {
                     )}
                   </div>
                 </div>
-              ))}
+              );
+            })}
             </div>
           )}
         </main>
@@ -627,12 +828,20 @@ export default function CollectionPage() {
             <div className="overflow-y-auto w-full hide-scrollbar">
               <div className="relative group">
                 <div ref={scrollContainerRef} className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar">
-                  <div className="relative aspect-[4/3] w-full shrink-0 snap-center bg-pink-50">
+                  <div className="relative aspect-[4/3] w-full shrink-0 snap-center bg-pink-50 cursor-zoom-in group/zoom" onClick={() => openLightbox(0)}>
                     <Image src={selectedProduct.imagePath} alt={selectedProduct.name} fill className="object-cover" sizes="(max-width: 640px) 100vw, 480px" />
+                    <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5 opacity-90 group-hover/zoom:opacity-100 transition shadow pointer-events-none">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" /></svg>
+                      <span className="font-semibold text-[11px]">Tap to view full</span>
+                    </div>
                   </div>
                   {selectedProduct.additionalImages?.map((url, idx) => (
-                    <div key={idx} className="relative aspect-[4/3] w-full shrink-0 snap-center bg-pink-50 border-l border-white">
+                    <div key={idx} className="relative aspect-[4/3] w-full shrink-0 snap-center bg-pink-50 border-l border-white cursor-zoom-in group/zoom" onClick={() => openLightbox(idx + 1)}>
                       <Image src={url} alt={`${selectedProduct.name} ${idx}`} fill className="object-cover" sizes="(max-width: 640px) 100vw, 480px" />
+                      <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5 opacity-90 group-hover/zoom:opacity-100 transition shadow pointer-events-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" /></svg>
+                        <span className="font-semibold text-[11px]">Tap to view full</span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -662,7 +871,23 @@ export default function CollectionPage() {
                 <div className="flex flex-wrap gap-1 mb-2">
                   {selectedProduct.tags?.map(t => <span key={t} className="bg-pink-50 text-pink-700 text-[10px] px-2 py-0.5 rounded-md border border-pink-200">{t}</span>)}
                 </div>
-                <h2 className="text-2xl font-bold text-[#1A1A1A] mb-1">{selectedProduct.name}</h2>
+                <div className="flex items-center justify-between mb-1 gap-2">
+                  <h2 className="text-2xl font-bold text-[#1A1A1A]">{selectedProduct.name}</h2>
+                  <button
+                    type="button"
+                    onClick={() => toggleWishlist(selectedProduct)}
+                    className={`px-3 py-1.5 rounded-full border transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold ${
+                      isWishlisted(selectedProduct.id)
+                        ? 'border-pink-300 bg-pink-50 text-pink-600 shadow-sm'
+                        : 'border-neutral-200 text-neutral-600 hover:text-black hover:border-black'
+                    }`}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={isWishlisted(selectedProduct.id) ? "currentColor" : "none"} stroke="currentColor" strokeWidth={isWishlisted(selectedProduct.id) ? 0 : 2} className="w-3.5 h-3.5 text-pink-500">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+                    </svg>
+                    <span>{isWishlisted(selectedProduct.id) ? 'Saved' : 'Save'}</span>
+                  </button>
+                </div>
                 
                 <p className={`text-lg font-medium mb-4 ${selectedProduct.priceOnAsk ? 'text-pink-600 font-bold' : 'text-neutral-600'}`}>
                   {selectedProduct.priceOnAsk ? "Price on Ask" : `€${selectedProduct.basePrice.toFixed(2)}`}
@@ -677,6 +902,9 @@ export default function CollectionPage() {
                   <div className="mb-4">
                     <div className="flex justify-between items-end mb-2">
                       <h3 className="text-sm font-bold text-neutral-900 uppercase tracking-wider">Shape</h3>
+                      <button type="button" onClick={() => setShowShapeGuide(true)} className="text-xs text-pink-600 font-bold hover:underline flex items-center gap-1 cursor-pointer">
+                        ✨ Shape & Sizing Guide
+                      </button>
                     </div>
                     <div className="grid grid-cols-3 gap-1.5">
                       {SHAPE_OPTIONS.map(shape => (
@@ -693,7 +921,11 @@ export default function CollectionPage() {
                   <div className="mb-4">
                     <div className="flex justify-between items-end mb-2">
                       <h3 className="text-sm font-bold text-neutral-900 uppercase tracking-wider">Size</h3>
-                      <Link href="/guides" className="text-xs text-neutral-500 underline underline-offset-2 hover:text-black">Sizing Guide</Link>
+                      {(selectedProduct.name.toLowerCase().includes('mini') || selectedProduct.name.toLowerCase().includes('kids') || selectedProduct.type?.toLowerCase() === 'minis' || (selectedProduct.tags || []).some((t: string) => t.toLowerCase() === 'minis')) && (
+                        <button type="button" onClick={() => setShowShapeGuide(true)} className="text-xs text-pink-600 font-bold hover:underline flex items-center gap-1 cursor-pointer">
+                          ✨ Sizing Guide
+                        </button>
+                      )}
                     </div>
                     <div className="flex flex-wrap gap-1.5 mb-1">
                       {currentUser && (
@@ -913,6 +1145,35 @@ export default function CollectionPage() {
           }}
         />
       )}
+    
+      {/* High-Resolution Uncropped Product Lightbox */}
+      {selectedProduct && (
+        <ProductLightbox
+          isOpen={lightboxOpen}
+          images={[selectedProduct.imagePath, ...(selectedProduct.additionalImages || [])]}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxOpen(false)}
+          title={selectedProduct.name}
+        />
+      )}
+
+      {/* Interactive In-Drawer Shape & Sizing Guide Modal */}
+      <ShapeSizingGuideModal
+        isOpen={showShapeGuide}
+        onClose={() => setShowShapeGuide(false)}
+      />
     </div>
+  );
+}
+
+export default function CollectionPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-black/80">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+      </div>
+    }>
+      <CollectionPageContent />
+    </Suspense>
   );
 }

@@ -12,8 +12,8 @@ export default function PoliciesPage() {
         <section>
           <h2 className="text-xl font-bold uppercase tracking-wider mb-4 border-b-2 border-pink-500 inline-block pb-1">Processing Time</h2>
           <div className="text-neutral-600 space-y-3 leading-relaxed">
-            <p>Every set of UnHolly Nails is meticulously crafted by hand, made to order just for you. Because of this, our standard processing time (the time it takes to create your set) is currently <strong>7-14 business days</strong>.</p>
-            <p>This does not include shipping time. Processing times are estimates and may be extended during high-volume periods (holidays, sales, or viral moments). If you need a set by a specific date, please contact us via DM before placing your order to inquire about rush processing (additional fees may apply).</p>
+            <p>Every set of UnHolly Nails is meticulously crafted by hand, made to order just for you. Because of this, my standard processing time (the time it takes to hand-paint your set) is currently <strong>7-14 business days</strong>.</p>
+            <p>This does not include shipping time. Processing times are estimates and may be extended during high-volume periods (holidays, sales, or viral moments). If you need a set by a specific date, please contact me via DM before placing your order to inquire about rush processing (additional fees may apply).</p>
           </div>
         </section>
 
@@ -33,18 +33,18 @@ export default function PoliciesPage() {
         <section>
           <h2 className="text-xl font-bold uppercase tracking-wider mb-4 border-b-2 border-pink-500 inline-block pb-1">Returns, Refunds & Cancellations</h2>
           <div className="text-neutral-600 space-y-3 leading-relaxed">
-            <p>Due to the custom, handmade nature of our products and strict hygiene standards, <strong>all sales are final</strong>. We do not accept returns, exchanges, or offer refunds.</p>
-            <p><strong>Sizing Issues:</strong> We are not responsible if you order the wrong size. It is the buyer's responsibility to measure accurately or purchase a Sizing Kit prior to ordering. No refunds or replacements will be issued for incorrect sizing.</p>
+            <p>Due to the custom, handmade nature of our products and strict hygiene standards, <strong>all sales are final</strong>. I do not accept returns, exchanges, or offer refunds.</p>
+            <p><strong>Sizing Issues:</strong> I cannot be held responsible if you order the wrong size. It is the buyer's responsibility to measure accurately or purchase a Sizing Kit prior to ordering. No refunds or replacements will be issued for incorrect sizing.</p>
             <p><strong>Cancellations:</strong> If you need to cancel an order, you must do so within <strong>24 hours</strong> of placing it. After 24 hours, the creation process may have already begun, and cancellations will no longer be accepted.</p>
-            <p><strong>Defects/Errors:</strong> If there is a mistake on our end (e.g., wrong design sent, wrong length sent), please contact us within 48 hours of delivery with photos of the issue, and we will gladly resolve it!</p>
+            <p><strong>Defects/Errors:</strong> If there is a mistake on my end (e.g., wrong design or length sent), please contact me within 48 hours of delivery with photos of the issue, and I will gladly resolve it!</p>
           </div>
         </section>
 
         <section>
           <h2 className="text-xl font-bold uppercase tracking-wider mb-4 border-b-2 border-pink-500 inline-block pb-1">Privacy Policy</h2>
           <div className="text-neutral-600 space-y-3 leading-relaxed">
-            <p>We value your privacy. Your personal information (name, address, email, phone number) collected during checkout or account creation is used strictly for processing your orders, providing customer support, and, with your consent, sending updates or promotional offers.</p>
-            <p>We will never sell, trade, or distribute your personal data to third parties. We use secure authentication methods (Google Sign-In) to protect your account data.</p>
+            <p>Your privacy is deeply valued. Your personal information (name, address, email, phone number) collected during checkout or account creation is used strictly for processing your orders, providing customer support, and, with your consent, sending updates or promotional offers.</p>
+            <p>I will never sell, trade, or distribute your personal data to third parties. Secure authentication methods (Google Sign-In) are used to protect your account data.</p>
           </div>
         </section>
       </div>

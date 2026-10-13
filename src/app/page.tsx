@@ -8,9 +8,12 @@ import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User 
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, auth, storage } from "@/lib/firebase";
 import { useCart } from "@/context/CartContext";
+import { useWishlist } from "@/context/WishlistContext";
 import { useAdmin } from "@/context/AdminContext";
 
 import { Product } from "@/lib/types";
+import ProductLightbox from "@/components/ProductLightbox";
+import ShapeSizingGuideModal from "@/components/ShapeSizingGuideModal";
 
 const SHAPE_OPTIONS = ["Almond", "Stiletto", "Coffin", "Square", "Oval", "Round", "Other"];
 const SIZE_OPTIONS = ["XS", "S", "M", "L", "Other"];
@@ -21,6 +24,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   
   const { addToCart } = useCart();
+  const { isWishlisted, toggleWishlist } = useWishlist();
   const { editMode, setEditMode, editingProduct, setEditingProduct } = useAdmin();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   
@@ -28,6 +32,14 @@ export default function Home() {
   const [selectedSize, setSelectedSize] = useState<string>("");
   const [selectedLength, setSelectedLength] = useState<string>("");
   const [selectedQuantity, setSelectedQuantity] = useState<number>(1);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [showShapeGuide, setShowShapeGuide] = useState(false);
+
+  const openLightbox = (idx: number = 0) => {
+    setLightboxIndex(idx);
+    setLightboxOpen(true);
+  };
 
   const [adminUser, setAdminUser] = useState<User | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -76,7 +88,7 @@ export default function Home() {
     heroTitle: "Luxury Hand-Painted<br/>Press-On Nails",
     heroSubtitle: "Salon-quality custom nail sets perfectly sized and delivered directly to your door.",
     collectionsTitle: "Featured Collections",
-    collectionsSubtitle: "Explore our exclusive themed sets hand-painted just for you.",
+    collectionsSubtitle: "Explore my exclusive themed sets hand-painted just for you.",
     newArrivalsTitle: "New Arrivals",
     newArrivalsSubtitle: "Fresh out of the studio. Grab them before they're gone.",
       featuredProductIds: [] as string[],
@@ -664,13 +676,54 @@ export default function Home() {
                           } else {
                             const displayProducts = actualIds.map(id => products.find(p => p.id === id)).filter(Boolean);
                             return displayProducts.map((product: any) => (
-                              <div key={product.id} className="bg-white/60 backdrop-blur-md rounded-3xl p-4 shadow-sm border border-pink-100/50 flex flex-col group relative transform transition-all duration-300 hover:-translate-y-2 hover:shadow-xl">
-                                {product.isPromo && (
+                              <div key={product.id} id={`product-${product.id}`} className="bg-white/60 backdrop-blur-md rounded-3xl p-4 shadow-sm border border-pink-100/50 flex flex-col group relative transform transition-all duration-300 hover:-translate-y-2 hover:shadow-xl">
+                                {!editMode && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          toggleWishlist(product);
+                        }}
+                        className={`absolute top-3 right-3 z-20 w-8 h-8 rounded-full flex items-center justify-center transition-all backdrop-blur-md cursor-pointer ${
+                          isWishlisted(product.id)
+                            ? 'bg-pink-500 text-white shadow-md scale-105'
+                            : 'bg-white/80 text-neutral-600 hover:text-pink-500 hover:bg-white shadow-sm'
+                        }`}
+                        title={isWishlisted(product.id) ? "Remove from wishlist" : "Save to wishlist"}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={isWishlisted(product.id) ? "currentColor" : "none"} stroke="currentColor" strokeWidth={isWishlisted(product.id) ? 0 : 2} className="w-4 h-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+                        </svg>
+                      </button>
+                    )}
+                    {product.isPromo && (
                                   <div className="absolute top-5 left-5 bg-[#FF5C9D] text-white text-[9px] font-bold px-3 py-1.5 rounded-full z-10 shadow-sm uppercase tracking-widest">PROMO</div>
                                 )}
-                                <div className="relative aspect-square overflow-hidden rounded-2xl bg-pink-50 cursor-pointer mb-5" onClick={() => openDrawer(product)}>
-                                  <Image src={product.imagePath} alt={product.name} fill className="object-cover transition-transform duration-700 ease-out group-hover:scale-110" sizes="(max-width: 640px) 50vw, 20vw" />
-                                </div>
+                                <div className="relative aspect-square overflow-hidden rounded-2xl bg-pink-50 cursor-pointer mb-5 group/cardimg" onClick={() => openDrawer(product)}>
+                                  <Image 
+                                    src={product.imagePath} 
+                                    alt={product.name} 
+                                    fill 
+                                    className={`object-cover transition-all duration-700 ease-out group-hover:scale-110 ${product.additionalImages && product.additionalImages.length > 0 ? 'lg:group-hover:opacity-0' : ''}`} 
+                                    sizes="(max-width: 640px) 50vw, 20vw" 
+                                  />
+                                  {product.additionalImages && product.additionalImages.length > 0 && (
+                                    <Image 
+                                      src={product.additionalImages[0]} 
+                                      alt={`${product.name} alternate angle`} 
+                                      fill 
+                                      className="object-cover transition-all duration-700 ease-out opacity-0 lg:group-hover:opacity-100 lg:group-hover:scale-110" 
+                                      sizes="(max-width: 640px) 50vw, 20vw" 
+                                    />
+                                  )}
+                                  {/* Mobile multi-photo indicator */}
+                                  {product.additionalImages && product.additionalImages.length > 0 && (
+                                    <div className="absolute bottom-2 right-2 z-10 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 lg:hidden">
+                                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>
+                                      <span>{product.additionalImages.length + 1}</span>
+                                    </div>
+                                  )}</div>
                                 <div className="flex flex-col flex-grow px-1">
                                   <h3 className="text-base font-black text-neutral-900 truncate mb-1">{product.name}</h3>
                                   <p className={`font-bold text-sm mb-4 ${product.priceOnAsk ? 'text-[#FF5C9D]' : 'text-neutral-500'}`}>
@@ -715,12 +768,20 @@ export default function Home() {
             <div className="overflow-y-auto w-full hide-scrollbar">
               <div className="relative group">
                 <div ref={scrollContainerRef} className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar">
-                  <div className="relative aspect-[4/3] w-full shrink-0 snap-center bg-pink-50">
+                  <div className="relative aspect-[4/3] w-full shrink-0 snap-center bg-pink-50 cursor-zoom-in group/zoom" onClick={() => openLightbox(0)}>
                     <Image src={selectedProduct.imagePath} alt={selectedProduct.name} fill className="object-cover" sizes="(max-width: 640px) 100vw, 480px" />
+                    <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5 opacity-90 group-hover/zoom:opacity-100 transition shadow pointer-events-none">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" /></svg>
+                      <span className="font-semibold text-[11px]">Tap to view full</span>
+                    </div>
                   </div>
-                  {selectedProduct.additionalImages?.map((url, idx) => (
-                    <div key={idx} className="relative aspect-[4/3] w-full shrink-0 snap-center bg-pink-50 border-l border-white">
+                  {selectedProduct.additionalImages?.map((url: string, idx: number) => (
+                    <div key={idx} className="relative aspect-[4/3] w-full shrink-0 snap-center bg-pink-50 border-l border-white cursor-zoom-in group/zoom" onClick={() => openLightbox(idx + 1)}>
                       <Image src={url} alt={`${selectedProduct.name} ${idx}`} fill className="object-cover" sizes="(max-width: 640px) 100vw, 480px" />
+                      <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5 opacity-90 group-hover/zoom:opacity-100 transition shadow pointer-events-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" /></svg>
+                        <span className="font-semibold text-[11px]">Tap to view full</span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -750,7 +811,23 @@ export default function Home() {
                 <div className="flex flex-wrap gap-1 mb-2">
                   {selectedProduct.tags?.map(t => <span key={t} className="bg-pink-50 text-pink-700 text-[10px] px-2 py-0.5 rounded-md border border-pink-200">{t}</span>)}
                 </div>
-                <h2 className="text-2xl font-bold text-[#1A1A1A] mb-1">{selectedProduct.name}</h2>
+                <div className="flex items-center justify-between mb-1 gap-2">
+                  <h2 className="text-2xl font-bold text-[#1A1A1A]">{selectedProduct.name}</h2>
+                  <button
+                    type="button"
+                    onClick={() => toggleWishlist(selectedProduct)}
+                    className={`px-3 py-1.5 rounded-full border transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold ${
+                      isWishlisted(selectedProduct.id)
+                        ? 'border-pink-300 bg-pink-50 text-pink-600 shadow-sm'
+                        : 'border-neutral-200 text-neutral-600 hover:text-black hover:border-black'
+                    }`}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={isWishlisted(selectedProduct.id) ? "currentColor" : "none"} stroke="currentColor" strokeWidth={isWishlisted(selectedProduct.id) ? 0 : 2} className="w-3.5 h-3.5 text-pink-500">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+                    </svg>
+                    <span>{isWishlisted(selectedProduct.id) ? 'Saved' : 'Save'}</span>
+                  </button>
+                </div>
                 
                 <p className={`text-lg font-medium mb-4 ${selectedProduct.priceOnAsk ? 'text-pink-600 font-bold' : 'text-neutral-600'}`}>
                   {selectedProduct.priceOnAsk ? "Price on Ask" : `\u20AC${selectedProduct.basePrice.toFixed(2)}`}
@@ -765,6 +842,9 @@ export default function Home() {
                   <div className="mb-4">
                     <div className="flex justify-between items-end mb-2">
                       <h3 className="text-sm font-bold text-neutral-900 uppercase tracking-wider">Shape</h3>
+                      <button type="button" onClick={() => setShowShapeGuide(true)} className="text-xs text-pink-600 font-bold hover:underline flex items-center gap-1 cursor-pointer">
+                        ✨ Shape & Sizing Guide
+                      </button>
                     </div>
                     <div className="grid grid-cols-3 gap-1.5">
                       {SHAPE_OPTIONS.map(shape => (
@@ -781,7 +861,11 @@ export default function Home() {
                   <div className="mb-4">
                     <div className="flex justify-between items-end mb-2">
                       <h3 className="text-sm font-bold text-neutral-900 uppercase tracking-wider">Size</h3>
-                      <Link href="/guides" className="text-xs text-neutral-500 underline underline-offset-2 hover:text-black">Sizing Guide</Link>
+                      {(selectedProduct.name.toLowerCase().includes('mini') || selectedProduct.name.toLowerCase().includes('kids') || selectedProduct.type?.toLowerCase() === 'minis' || (selectedProduct.tags || []).some((t: string) => t.toLowerCase() === 'minis')) && (
+                        <button type="button" onClick={() => setShowShapeGuide(true)} className="text-xs text-pink-600 font-bold hover:underline flex items-center gap-1 cursor-pointer">
+                          ✨ Sizing Guide
+                        </button>
+                      )}
                     </div>
                     <div className="flex flex-wrap gap-1.5 mb-1">
                       {currentUser && (
@@ -1056,6 +1140,23 @@ export default function Home() {
           </div>
         )}
 
+
+      {/* High-Resolution Uncropped Product Lightbox */}
+      {selectedProduct && (
+        <ProductLightbox
+          isOpen={lightboxOpen}
+          images={[selectedProduct.imagePath, ...(selectedProduct.additionalImages || [])]}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxOpen(false)}
+          title={selectedProduct.name}
+        />
+      )}
+
+      {/* Interactive In-Drawer Shape & Sizing Guide Modal */}
+      <ShapeSizingGuideModal
+        isOpen={showShapeGuide}
+        onClose={() => setShowShapeGuide(false)}
+      />
 </div>
   );
 }

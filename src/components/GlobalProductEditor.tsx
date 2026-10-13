@@ -16,6 +16,9 @@ export default function GlobalProductEditor() {
   const [saving, setSaving] = useState(false);
   const [tagInput, setTagInput] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mainFileInputRef = useRef<HTMLInputElement>(null);
+  const [newMainFile, setNewMainFile] = useState<File | null>(null);
+  const [mainPreviewUrl, setMainPreviewUrl] = useState<string | null>(null);
   const [adminUser, setAdminUser] = useState<User | null>(null);
   const [existingTags, setExistingTags] = useState<string[]>([]);
 
@@ -23,6 +26,11 @@ export default function GlobalProductEditor() {
     const unsub = onAuthStateChanged(auth, u => setAdminUser(u));
     return () => unsub();
   }, []);
+
+  useEffect(() => {
+    setNewMainFile(null);
+    setMainPreviewUrl(null);
+  }, [editingProduct?.id]);
 
   useEffect(() => {
     if (editingProduct && adminUser) {
@@ -53,6 +61,50 @@ export default function GlobalProductEditor() {
 
   if (!editingProduct) return null;
 
+  const handleMainFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setNewMainFile(file);
+      setMainPreviewUrl(URL.createObjectURL(file));
+    }
+  };
+
+  const makePhotoMain = (idx: number) => {
+    if (!editingProduct) return;
+    const currentMain = mainPreviewUrl || editingProduct.imagePath;
+    const selectedExtra = (editingProduct.additionalImages || [])[idx];
+    if (!selectedExtra) return;
+
+    const updatedExtras = [...(editingProduct.additionalImages || [])];
+    updatedExtras.splice(idx, 1);
+    if (currentMain && !currentMain.includes("unsplash")) {
+      updatedExtras.unshift(currentMain);
+    }
+
+    setEditingProduct({
+      ...editingProduct,
+      imagePath: selectedExtra,
+      additionalImages: updatedExtras
+    });
+    setNewMainFile(null);
+    setMainPreviewUrl(null);
+  };
+
+  const moveExtraPhoto = (fromIdx: number, toIdx: number) => {
+    if (!editingProduct) return;
+    const list = [...(editingProduct.additionalImages || [])];
+    if (toIdx < 0 || toIdx >= list.length) return;
+    const [moved] = list.splice(fromIdx, 1);
+    list.splice(toIdx, 0, moved);
+    setEditingProduct({ ...editingProduct, additionalImages: list });
+  };
+
+  const removeExtraPhoto = (idx: number) => {
+    if (!editingProduct) return;
+    const updated = (editingProduct.additionalImages || []).filter((_, i) => i !== idx);
+    setEditingProduct({ ...editingProduct, additionalImages: updated });
+  };
+
   const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -80,6 +132,13 @@ export default function GlobalProductEditor() {
       let newImagePath = editingProduct.imagePath;
       let newAdditionalImages = [...(editingProduct.additionalImages || [])];
       
+      // Upload new main photo if one was selected
+      if (newMainFile) {
+        const storageReference = ref(storage, `users/${adminUser.uid}/images/storefront_${Date.now()}_main_${newMainFile.name}`);
+        await uploadBytes(storageReference, newMainFile);
+        newImagePath = await getDownloadURL(storageReference);
+      }
+
       if (fileInputRef.current?.files && fileInputRef.current.files.length > 0) {
         const files = Array.from(fileInputRef.current.files);
         for (const file of files) {
@@ -206,24 +265,121 @@ export default function GlobalProductEditor() {
               <textarea value={editingProduct.description || ''} onChange={e => setEditingProduct({...editingProduct, description: e.target.value})} className="w-full border rounded-lg px-3 py-2 h-24" />
             </div>
 
-            <div className="p-4 border rounded-xl bg-neutral-50">
-              <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Upload Multiple Photos</label>
-              <div className="flex items-center gap-4 mb-4">
-                <input type="file" ref={fileInputRef} accept="image/*" multiple className="text-sm flex-1 bg-white border p-2 rounded-lg" />
-              </div>
-              
-              <div className="grid grid-cols-4 gap-2">
-                <div className="relative w-full aspect-square rounded overflow-hidden border-2 border-pink-400">
-                  <Image src={editingProduct.imagePath || "https://images.unsplash.com/photo-1596205731518-e37c897f7405?w=500"} alt="main" fill className="object-cover" />
-                  <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] text-center py-0.5">Main</div>
+            <div className="p-4 border rounded-xl bg-neutral-50 space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-neutral-800 uppercase">Product Photos</label>
+                  <p className="text-[11px] text-neutral-500">The first photo is the primary storefront display image. Tap &quot;Set as Main&quot; on any photo to switch.</p>
                 </div>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => mainFileInputRef.current?.click()}
+                    className="bg-white border border-neutral-300 hover:border-pink-500 text-xs font-bold px-3 py-1.5 rounded-lg transition shadow-sm flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>📷</span>
+                    <span>Replace Main</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="bg-black hover:bg-neutral-800 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition shadow-sm flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>➕</span>
+                    <span>Add Photos</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Hidden file inputs */}
+              <input
+                type="file"
+                ref={mainFileInputRef}
+                accept="image/*"
+                onChange={handleMainFileChange}
+                className="hidden"
+              />
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                multiple
+                className="hidden"
+              />
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {/* 1. Primary Main Photo Card */}
+                <div className="relative aspect-square rounded-xl overflow-hidden border-2 border-pink-500 ring-2 ring-pink-500/20 bg-pink-50 group shadow-sm flex flex-col justify-between">
+                  <Image
+                    src={mainPreviewUrl || editingProduct.imagePath || "https://images.unsplash.com/photo-1596205731518-e37c897f7405?w=500"}
+                    alt="Main display photo"
+                    fill
+                    className="object-cover"
+                  />
+                  <div className="absolute top-2 left-2 z-10 bg-pink-500 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full shadow flex items-center gap-1 uppercase tracking-wider">
+                    <span>★</span>
+                    <span>{newMainFile ? "New Main" : "Main"}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => mainFileInputRef.current?.click()}
+                    className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center text-white text-xs font-bold gap-1 cursor-pointer"
+                  >
+                    <span className="text-base">📷</span>
+                    <span>Change Photo</span>
+                  </button>
+                </div>
+
+                {/* 2. Additional Photos Cards */}
                 {editingProduct.additionalImages?.map((url, idx) => (
-                  <div key={idx} className="relative w-full aspect-square rounded overflow-hidden border group">
-                    <Image src={url} alt={`extra-${idx}`} fill className="object-cover" />
-                    <button type="button" onClick={() => {
-                      const updated = (editingProduct.additionalImages || []).filter((_, i) => i !== idx);
-                      setEditingProduct({...editingProduct, additionalImages: updated});
-                    }} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition">×</button>
+                  <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-neutral-200 bg-neutral-100 group shadow-sm flex flex-col justify-between">
+                    <Image
+                      src={url}
+                      alt={`Extra photo ${idx + 1}`}
+                      fill
+                      className="object-cover"
+                    />
+                    {/* Top action bar: Move & Delete */}
+                    <div className="absolute top-1.5 right-1.5 z-10 flex gap-1">
+                      {idx > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => moveExtraPhoto(idx, idx - 1)}
+                          className="w-5 h-5 rounded-full bg-black/60 hover:bg-black text-white text-[10px] flex items-center justify-center font-bold transition shadow cursor-pointer"
+                          title="Move left"
+                        >
+                          &larr;
+                        </button>
+                      )}
+                      {idx < (editingProduct.additionalImages?.length || 0) - 1 && (
+                        <button
+                          type="button"
+                          onClick={() => moveExtraPhoto(idx, idx + 1)}
+                          className="w-5 h-5 rounded-full bg-black/60 hover:bg-black text-white text-[10px] flex items-center justify-center font-bold transition shadow cursor-pointer"
+                          title="Move right"
+                        >
+                          &rarr;
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeExtraPhoto(idx)}
+                        className="w-5 h-5 rounded-full bg-red-500 hover:bg-red-600 text-white text-xs flex items-center justify-center font-bold transition shadow cursor-pointer"
+                        title="Remove photo"
+                      >
+                        &times;
+                      </button>
+                    </div>
+
+                    {/* Bottom: Set as Main button */}
+                    <button
+                      type="button"
+                      onClick={() => makePhotoMain(idx)}
+                      className="absolute bottom-0 inset-x-0 bg-black/75 hover:bg-pink-600 text-white text-[10px] font-bold py-1.5 transition flex items-center justify-center gap-1 z-10 cursor-pointer shadow-md"
+                    >
+                      <span>★</span>
+                      <span>Set as Main</span>
+                    </button>
                   </div>
                 ))}
               </div>

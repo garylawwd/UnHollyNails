@@ -32,10 +32,10 @@ export default function GlobalFooter() {
           <div className="text-center md:text-left">
             <h3 className="font-black text-black uppercase tracking-widest mb-6 text-sm">Information</h3>
             <ul className="space-y-4">
-              <li><Link href="/about" className="text-sm text-neutral-500 hover:text-pink-500 transition-colors">About Us</Link></li>
+              <li><Link href="/about" className="text-sm text-neutral-500 hover:text-pink-500 transition-colors">About Me</Link></li>
               <li><Link href="/guides" className="text-sm text-neutral-500 hover:text-pink-500 transition-colors">Sizing & Application Guide</Link></li>
               <li><Link href="/policies" className="text-sm text-neutral-500 hover:text-pink-500 transition-colors">Shipping & Returns</Link></li>
-              <li><Link href="/contact" className="text-sm text-neutral-500 hover:text-pink-500 transition-colors">Contact Us</Link></li>
+              <li><Link href="/contact" className="text-sm text-neutral-500 hover:text-pink-500 transition-colors">Contact Me</Link></li>
             </ul>
           </div>
 
@@ -47,6 +47,19 @@ export default function GlobalFooter() {
                 <a href="https://instagram.com/unhollynails" target="_blank" rel="noopener noreferrer" className="flex justify-center md:justify-start items-center gap-3 text-sm text-neutral-500 hover:text-pink-500 transition-colors">
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
                   Instagram
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://www.facebook.com/profile.php?id=61575660355121"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex justify-center md:justify-start items-center gap-3 text-sm text-neutral-500 hover:text-[#1877F2] transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                  </svg>
+                  Facebook
                 </a>
               </li>
               <li>

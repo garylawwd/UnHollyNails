@@ -45,7 +45,7 @@ export default function CheckoutSuccessPage() {
         
         <h1 className="text-3xl sm:text-4xl font-black text-black mb-4 uppercase tracking-wider">Request Received!</h1>
         <p className="text-neutral-500 mb-10 leading-relaxed font-medium">
-          Your order request is safely with us. We will slide into your DMs (or inbox) shortly to confirm your design details and organize payment!
+          Your order request is safely received! I will slide into your DMs (or inbox) shortly to confirm your custom design details and organize payment.
         </p>
         
         <Link 

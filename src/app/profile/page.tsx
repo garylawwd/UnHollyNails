@@ -1,7 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { auth, db } from '@/lib/firebase';
+import { auth, db, storage } from '@/lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { onSnapshot, deleteDoc } from 'firebase/firestore';
+import ProductLightbox from '@/components/ProductLightbox';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { collection, query, where, getDocs, doc, setDoc } from 'firebase/firestore';
 import Link from 'next/link';
@@ -19,6 +22,12 @@ export default function ProfilePage() {
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
   const [orders, setOrders] = useState<any[]>([]);
+  const [clientImages, setClientImages] = useState<any[]>([]);
+  const [gallerySubTab, setGallerySubTab] = useState<'inspo' | 'wishlist' | 'completed'>('inspo');
+  const [uploadingInspo, setUploadingInspo] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxImages, setLightboxImages] = useState<string[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   
   // Setup Flow States
   const [needsSetup, setNeedsSetup] = useState(false);
@@ -107,6 +116,16 @@ export default function ProfilePage() {
             loadedOrders.sort((a, b) => (b.orderDate || b.updatedAt || 0) - (a.orderDate || a.updatedAt || 0));
             setOrders(loadedOrders);
 
+            // Realtime listener for client photos (Inspo, Wishlist, Completed)
+            const imgQ = query(
+              collection(db, "users", vendorUid, "client_images"),
+              where("clientSyncId", "==", clientData.syncId)
+            );
+            onSnapshot(imgQ, (snap) => {
+              const loaded = snap.docs.map(d => ({ docId: d.id, ...d.data() }));
+              setClientImages(loaded);
+            });
+
           } else {
             // Unrecognized user. Ask for Instagram link to claim profile or create a new one.
             setNeedsSetup(true);
@@ -119,6 +138,52 @@ export default function ProfilePage() {
     });
     return () => unsub();
   }, [vendorUid]);
+
+  const handleUploadInspo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0 || !clientProfile?.syncId) return;
+    const file = e.target.files[0];
+    setUploadingInspo(true);
+    try {
+      const storageRef = ref(storage, `users/${vendorUid}/client_images/inspo_${Date.now()}_${file.name}`);
+      await uploadBytes(storageRef, file);
+      const downloadUrl = await getDownloadURL(storageRef);
+      const syncId = crypto.randomUUID();
+      await setDoc(doc(db, "users", vendorUid, "client_images", syncId), {
+        syncId,
+        clientId: 0,
+        clientSyncId: clientProfile.syncId,
+        linkedClientSyncIds: [],
+        uri: downloadUrl,
+        imageType: "inspo",
+        notes: file.name.replace(/\.[^/.]+$/, ""),
+        tags: [],
+        isPublic: false,
+        messages: [],
+        orderDate: null,
+        updatedAt: Date.now()
+      });
+    } catch (err) {
+      console.error("Failed to upload inspiration photo", err);
+      alert("Could not upload photo. Please try again.");
+    } finally {
+      setUploadingInspo(false);
+    }
+  };
+
+  const handleDeleteClientImage = async (docId: string) => {
+    try {
+      await deleteDoc(doc(db, "users", vendorUid, "client_images", docId));
+    } catch (err) {
+      console.error("Failed to delete client image", err);
+    }
+  };
+
+  const openPhotoLightbox = (imgs: string[], idx: number) => {
+    setLightboxImages(imgs);
+    setLightboxIndex(idx);
+    setLightboxOpen(true);
+  };
+
   const handleSetupProfile = async (isSkip = false) => {
     if (!user) return;
     setSetupError('');
@@ -500,9 +565,232 @@ export default function ProfilePage() {
             </div>
 
             {/* Default Shape & Length Pill */}
-            <button className="bg-pink-100 text-pink-900 font-bold px-8 py-3 rounded-full flex items-center gap-2 hover:bg-pink-200 transition shadow-sm border border-pink-200 cursor-pointer">
+            <button className="bg-pink-100 text-pink-900 font-bold px-8 py-3 rounded-full flex items-center gap-2 hover:bg-pink-200 transition shadow-sm border border-pink-200 cursor-pointer mb-8">
               ✨ {clientProfile?.defaultLength || 'M'} {clientProfile?.defaultShape || 'Round'}
             </button>
+
+            {/* Client Visual Galleries: Inspiration, Wishlist, Completed Work */}
+            <div className="w-full border-t border-pink-100 pt-8 mt-2">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <div>
+                  <h3 className="text-lg font-black text-neutral-900">My Nail Vault</h3>
+                  <p className="text-xs text-neutral-500">Your design inspirations, saved wishlist sets, and completed manicures.</p>
+                </div>
+
+                {gallerySubTab === 'inspo' && (
+                  <label className="cursor-pointer bg-black text-white hover:bg-neutral-800 px-4 py-2 rounded-full text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
+                    {uploadingInspo ? (
+                      <span className="animate-pulse">Uploading...</span>
+                    ) : (
+                      <>
+                        <span>+ Add Inspiration</span>
+                        <input type="file" accept="image/*" className="hidden" onChange={handleUploadInspo} disabled={uploadingInspo} />
+                      </>
+                    )}
+                  </label>
+                )}
+              </div>
+
+              {/* Sub-tab pills */}
+              <div className="flex gap-2 p-1 bg-pink-50/70 rounded-2xl mb-6 max-w-md">
+                <button
+                  type="button"
+                  onClick={() => setGallerySubTab('inspo')}
+                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    gallerySubTab === 'inspo'
+                      ? 'bg-white text-pink-600 shadow-sm'
+                      : 'text-neutral-500 hover:text-neutral-900'
+                  }`}
+                >
+                  Inspiration ({clientImages.filter(img => img.imageType === 'inspo' || (!img.imageType && !img.uri?.includes('completed'))).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGallerySubTab('wishlist')}
+                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    gallerySubTab === 'wishlist'
+                      ? 'bg-white text-pink-600 shadow-sm'
+                      : 'text-neutral-500 hover:text-neutral-900'
+                  }`}
+                >
+                  ❤️ Wishlist ({clientImages.filter(img => img.imageType === 'wishlist').length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGallerySubTab('completed')}
+                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    gallerySubTab === 'completed'
+                      ? 'bg-white text-pink-600 shadow-sm'
+                      : 'text-neutral-500 hover:text-neutral-900'
+                  }`}
+                >
+                  Completed ({clientImages.filter(img => img.imageType === 'completed' || (img.uri && img.uri.includes('completed'))).length})
+                </button>
+              </div>
+
+              {/* Inspiration Ideas Tab */}
+              {gallerySubTab === 'inspo' && (
+                <div>
+                  {clientImages.filter(img => img.imageType === 'inspo' || (!img.imageType && !img.uri?.includes('completed'))).length === 0 ? (
+                    <div className="text-center py-12 px-4 rounded-3xl border-2 border-dashed border-pink-200 bg-[#FFF5F8]/40">
+                      <span className="text-3xl mb-2 block">💡</span>
+                      <p className="font-bold text-neutral-800 text-sm">No inspiration photos yet</p>
+                      <p className="text-xs text-neutral-500 mt-1 mb-4">Found nail art you love on Instagram or Pinterest? Upload it here so I can reference it when hand-crafting your custom sets!</p>
+                      <label className="cursor-pointer inline-block bg-pink-500 text-white px-5 py-2.5 rounded-full text-xs font-bold hover:bg-pink-600 transition shadow">
+                        Upload Your First Idea
+                        <input type="file" accept="image/*" className="hidden" onChange={handleUploadInspo} disabled={uploadingInspo} />
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                      {clientImages
+                        .filter(img => img.imageType === 'inspo' || (!img.imageType && !img.uri?.includes('completed')))
+                        .map((img, idx, arr) => (
+                          <div key={img.docId || img.syncId || idx} className="relative aspect-square rounded-2xl overflow-hidden group shadow-sm bg-pink-50 border border-pink-100">
+                            <Image 
+                              src={img.uri} 
+                              alt={img.notes || "Inspiration"} 
+                              fill 
+                              className="object-cover cursor-zoom-in group-hover:scale-105 transition-transform duration-300" 
+                              onClick={() => openPhotoLightbox(arr.map(i => i.uri), idx)}
+                            />
+                            {/* Delete button: always accessible on mobile and hoverable on desktop */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteClientImage(img.docId || img.syncId);
+                              }}
+                              className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 hover:bg-red-500 text-white flex items-center justify-center font-bold text-xs transition shadow z-10 cursor-pointer"
+                              title="Delete idea"
+                            >
+                              &times;
+                            </button>
+                            {img.notes && (
+                              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2 pt-4 pointer-events-none">
+                                <p className="text-[10px] text-white font-medium truncate">{img.notes}</p>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Wishlist Tab */}
+              {gallerySubTab === 'wishlist' && (
+                <div>
+                  {clientImages.filter(img => img.imageType === 'wishlist').length === 0 ? (
+                    <div className="text-center py-12 px-4 rounded-3xl border-2 border-dashed border-pink-200 bg-[#FFF5F8]/40">
+                      <span className="text-3xl mb-2 block">❤️</span>
+                      <p className="font-bold text-neutral-800 text-sm">Your wishlist is empty</p>
+                      <p className="text-xs text-neutral-500 mt-1 mb-4">Tap the heart icon on any design in the shop to save it here!</p>
+                      <Link href="/collections/all" className="inline-block bg-black text-white px-5 py-2.5 rounded-full text-xs font-bold hover:bg-neutral-800 transition shadow">
+                        Explore All Designs
+                      </Link>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                      {clientImages
+                        .filter(img => img.imageType === 'wishlist')
+                        .map((img, idx, arr) => {
+                          const productId = (img.tags && img.tags.length > 0 && img.tags[0]) 
+                            || (img.syncId?.startsWith('wish_') ? img.syncId.split('_').slice(2).join('_') : '')
+                            || (img.syncId || '');
+
+                          const qParams = new URLSearchParams();
+                          if (productId) qParams.set('product', productId);
+                          if (img.notes) qParams.set('name', img.notes);
+                          if (img.uri) qParams.set('img', img.uri);
+
+                          const storeUrl = `/collections/all?${qParams.toString()}${productId ? `#product-${encodeURIComponent(productId)}` : ''}`;
+
+                          return (
+                            <div key={img.docId || img.syncId || idx} className="rounded-2xl overflow-hidden shadow-sm bg-white border border-pink-100 flex flex-col group transition-all hover:shadow-md">
+                              <div 
+                                className="relative aspect-square w-full bg-pink-50 overflow-hidden cursor-zoom-in group/cardimg" 
+                                onClick={() => openPhotoLightbox(arr.map(i => i.uri), idx)}
+                              >
+                                <Image 
+                                  src={img.uri} 
+                                  alt={img.notes || "Wishlist item"} 
+                                  fill 
+                                  className="object-cover group-hover/cardimg:scale-105 transition-transform duration-300" 
+                                />
+                                {/* Delete button: always accessible on top-right */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteClientImage(img.docId || img.syncId);
+                                  }}
+                                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 hover:bg-red-500 text-white flex items-center justify-center font-bold text-xs transition shadow z-10 cursor-pointer"
+                                  title="Remove from wishlist"
+                                >
+                                  &times;
+                                </button>
+                                {/* Subtle zoom badge */}
+                                <div className="absolute bottom-2 right-2 bg-black/50 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 opacity-80 pointer-events-none">
+                                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" />
+                                  </svg>
+                                  <span>Zoom</span>
+                                </div>
+                              </div>
+                              <div className="p-3 flex flex-col justify-between flex-grow bg-white border-t border-pink-50">
+                                <p className="text-xs sm:text-sm font-bold text-neutral-900 truncate mb-2.5" title={img.notes || "Custom Set"}>
+                                  {img.notes || "Custom Set"}
+                                </p>
+                                <Link 
+                                  href={storeUrl}
+                                  scroll={false}
+                                  className="w-full text-center bg-black hover:bg-pink-600 text-white text-xs font-bold py-2 px-3 rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                                >
+                                  <span>View in Store</span>
+                                  <span>&rarr;</span>
+                                </Link>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Completed Work Tab */}
+              {gallerySubTab === 'completed' && (
+                <div>
+                  {clientImages.filter(img => img.imageType === 'completed' || (img.uri && img.uri.includes('completed'))).length === 0 ? (
+                    <div className="text-center py-12 px-4 rounded-3xl border-2 border-dashed border-pink-200 bg-[#FFF5F8]/40">
+                      <span className="text-3xl mb-2 block">✨</span>
+                      <p className="font-bold text-neutral-800 text-sm">No completed sets photographed yet</p>
+                      <p className="text-xs text-neutral-500 mt-1">Once I finish hand-crafting your custom nail sets, studio photos of your finished nails will appear right here!</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                      {clientImages
+                        .filter(img => img.imageType === 'completed' || (img.uri && img.uri.includes('completed')))
+                        .map((img, idx, arr) => (
+                          <div key={img.docId || img.syncId || idx} className="relative aspect-square rounded-2xl overflow-hidden group shadow-sm bg-pink-50 border border-pink-100">
+                            <Image 
+                              src={img.uri} 
+                              alt="Completed Manicure" 
+                              fill 
+                              className="object-cover cursor-zoom-in group-hover:scale-105 transition-transform duration-300" 
+                              onClick={() => openPhotoLightbox(arr.map(i => i.uri), idx)}
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-2 flex flex-col justify-end pointer-events-none">
+                              <span className="text-[10px] text-white font-bold bg-pink-500/80 backdrop-blur-sm self-start px-2 py-0.5 rounded-full">Finished Set</span>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -711,6 +999,15 @@ export default function ProfilePage() {
           </div>
         )}
       </main>
-    </div>
+    
+      {/* Lightbox for Client Photos */}
+      <ProductLightbox
+        isOpen={lightboxOpen}
+        images={lightboxImages}
+        initialIndex={lightboxIndex}
+        onClose={() => setLightboxOpen(false)}
+        title="Client Vault Photo"
+      />
+</div>
   );
 }

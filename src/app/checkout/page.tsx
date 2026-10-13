@@ -187,7 +187,7 @@ export default function CheckoutPage() {
       await submitOrder(syncId);
     } catch (error) {
       console.error("Profile creation error:", error);
-      alert("Authentication failed. We will proceed with a guest order instead.");
+      alert("Authentication failed. Proceeding with a guest order instead.");
       await handleCreateGhostProfile(); // Fallback to ghost
     }
   };
@@ -317,7 +317,7 @@ export default function CheckoutPage() {
               {submitting ? "Processing..." : "Submit Order Request"}
             </button>
             <p className="text-[10px] text-neutral-400 text-center mt-4 uppercase tracking-widest leading-relaxed">
-              No payment is taken today.<br/>We will DM/Email you to confirm details & payment.
+              No payment is taken today.<br/>I will DM or email you to confirm details & payment.
             </p>
           </div>
         </div>

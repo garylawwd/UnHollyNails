@@ -21,6 +21,7 @@ import GlobalHeader from "@/components/GlobalHeader";
 import GlobalFooter from "@/components/GlobalFooter";
 import { CartProvider } from "@/context/CartContext";
 import { AdminProvider } from "@/context/AdminContext";
+import { WishlistProvider } from "@/context/WishlistContext";
 import CartDrawer from "@/components/CartDrawer";
 import GlobalProductEditor from "@/components/GlobalProductEditor";
 
@@ -33,15 +34,17 @@ export default function RootLayout({
     <html lang="en" className="h-full">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-full flex flex-col`}>
         <AdminProvider>
-          <CartProvider>
-            <GlobalHeader />
-            <CartDrawer />
-            <main className="flex-grow flex flex-col">
-              {children}
-            </main>
-            <GlobalFooter />
-            <GlobalProductEditor />
-          </CartProvider>
+          <WishlistProvider>
+            <CartProvider>
+              <GlobalHeader />
+              <CartDrawer />
+              <main className="flex-grow flex flex-col">
+                {children}
+              </main>
+              <GlobalFooter />
+              <GlobalProductEditor />
+            </CartProvider>
+          </WishlistProvider>
         </AdminProvider>
       </body>
     </html>
