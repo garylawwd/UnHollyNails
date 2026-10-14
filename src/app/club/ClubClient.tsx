@@ -326,7 +326,7 @@ export default function ClubClient() {
                   <span>{signingIn ? "Connecting..." : "Sign In to Join Free"}</span>
                 </button>
                 <a
-                  href="https://ig.me/m/unholly-nails?text=CLUB"
+                  href="https://ig.me/m/unhollynails?text=CLUB"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-full sm:w-auto bg-pink-50 hover:bg-pink-100 text-[#FF5C9D] border border-pink-200 font-brand font-bold text-xs uppercase tracking-wider px-6 py-3 rounded-full transition text-center"
@@ -533,7 +533,7 @@ export default function ClubClient() {
             ) : (
               <>
                 <a
-                  href="https://ig.me/m/unholly-nails?text=CLUB"
+                  href="https://ig.me/m/unhollynails?text=CLUB"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-block bg-[#FF5C9D] hover:bg-pink-600 text-white font-brand font-bold text-xs uppercase tracking-wider px-8 py-3.5 rounded-full transition shadow-md shadow-pink-500/20"

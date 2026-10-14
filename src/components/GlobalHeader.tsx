@@ -538,7 +538,7 @@ export default function GlobalHeader() {
                     <div className="h-px bg-pink-100/80 my-1"></div>
 
                     <a
-                      href="https://ig.me/m/unholly-nails"
+                      href="https://ig.me/m/unhollynails"
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={() => setStudioDropdownOpen(false)}
