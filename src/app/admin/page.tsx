@@ -898,7 +898,7 @@ export default function AdminDashboard() {
                   title: "Policies & Shipping",
                   route: "/policies",
                   icon: "📦",
-                  desc: "Update An Post nationwide flat rates (€4.85 standard / €9 tracked), 5–10 business day turnaround times, and cancellation rules.",
+                  desc: "Update An Post shipping rates (from €4.85 standard / €9 tracked), order size variations, 5–10 business day turnaround times, and cancellation rules.",
                   badge: "Shipping & Terms",
                   color: "border-neutral-200 hover:border-neutral-400"
                 },

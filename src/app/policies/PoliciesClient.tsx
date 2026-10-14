@@ -20,6 +20,7 @@ interface PoliciesData {
   trackedTitle: string;
   trackedDesc: string;
   trackedPrice: string;
+  shippingNotice?: string;
   cancellationsEyebrow: string;
   cancellationsTitle: string;
   finalSaleNotice: string;
@@ -40,10 +41,11 @@ export const DEFAULT_POLICIES_DATA: PoliciesData = {
   turnaroundNotice: "Every set is custom painted so please allow a turnaround time of 5–10 business days for your order to be created before it is shipped.",
   standardTitle: "Standard Shipping",
   standardDesc: "Nationwide via An Post standard delivery.",
-  standardPrice: "Flat Rate €4.85",
+  standardPrice: "From €4.85",
   trackedTitle: "Tracked Shipping",
   trackedDesc: "Highly recommended for custom orders & gifts. Nationwide via An Post.",
-  trackedPrice: "Flat Rate €9.00",
+  trackedPrice: "From €9.00",
+  shippingNotice: "Base shipping rates are listed above. Depending on order size, quantity of sets, or parcel weight, shipping may cost more in accordance with An Post postal rates.",
   cancellationsEyebrow: "Orders & Returns",
   cancellationsTitle: "Cancellations & Refunds",
   finalSaleNotice: "Because every single product is hand painted specifically for you, all sales are final.",
@@ -310,6 +312,30 @@ export default function PoliciesClient() {
                 </div>
               ) : (
                 <span className="font-brand font-bold text-sm text-[#FF5C9D]">{data.trackedPrice}</span>
+              )}
+            </div>
+          </div>
+
+          {/* Order Size & Weight Notice */}
+          <div className="mt-4 p-3.5 rounded-xl bg-pink-50/70 border border-pink-100 flex items-start gap-2.5 text-left">
+            <span className="text-base flex-shrink-0 mt-0.5">📦</span>
+            <div className="flex-1">
+              {editMode ? (
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] uppercase font-bold text-pink-700 font-brand">Order Size / Weight Notice:</span>
+                  <textarea
+                    value={data.shippingNotice || "Base shipping rates are listed above. Depending on order size, quantity of sets, or parcel weight, shipping may cost more in accordance with An Post postal rates."}
+                    onChange={e => setData(prev => ({ ...prev, shippingNotice: e.target.value }))}
+                    onBlur={() => saveToFirestore(data)}
+                    rows={2}
+                    className="w-full bg-white border border-pink-300 rounded p-1.5 font-brand text-xs text-neutral-700 outline-none resize-none"
+                  />
+                </div>
+              ) : (
+                <p className="font-brand text-xs text-neutral-600 leading-relaxed">
+                  <strong className="text-neutral-900 font-bold">Please note: </strong>
+                  {data.shippingNotice || "Base shipping rates are listed above. Depending on order size, quantity of sets, or parcel weight, shipping may cost more in accordance with An Post postal rates."}
+                </p>
               )}
             </div>
           </div>
