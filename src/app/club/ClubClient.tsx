@@ -341,7 +341,7 @@ export default function ClubClient() {
         {/* Perks Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {data.perks.map((perk, pIdx) => (
-            <div key={perk.id || pIdx} className="bg-white/80 backdrop-blur-md rounded-2xl sm:rounded-3xl p-6 sm:p-8 shadow-sm border border-pink-100 flex flex-col justify-between relative">
+            <div key={perk.id || pIdx} className="bg-white/80 backdrop-blur-md rounded-2xl sm:rounded-3xl p-6 sm:p-8 shadow-sm border border-pink-100 flex flex-col justify-between relative text-center">
               {editMode && (
                 <button
                   onClick={() => handleDeletePerk(pIdx)}
@@ -352,8 +352,8 @@ export default function ClubClient() {
                 </button>
               )}
 
-              <div>
-                <div className="w-12 h-12 rounded-2xl bg-pink-50 border border-pink-100 flex items-center justify-center text-2xl mb-4">
+              <div className="flex flex-col items-center text-center">
+                <div className="w-12 h-12 rounded-2xl bg-pink-50 border border-pink-100 flex items-center justify-center text-2xl mx-auto mb-4">
                   {editMode ? (
                     <input
                       type="text"
@@ -368,20 +368,20 @@ export default function ClubClient() {
                 </div>
 
                 {editMode ? (
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-2 w-full">
                     <input
                       type="text"
                       value={perk.title}
                       onChange={e => handlePerkChange(pIdx, "title", e.target.value)}
                       onBlur={() => saveToFirestore(data)}
-                      className="bg-white border border-pink-300 rounded px-2 py-1 font-brand font-bold text-base text-neutral-900 outline-none"
+                      className="bg-white border border-pink-300 rounded px-2 py-1 font-brand font-bold text-base text-neutral-900 outline-none text-center"
                     />
                     <textarea
                       value={perk.desc}
                       onChange={e => handlePerkChange(pIdx, "desc", e.target.value)}
                       onBlur={() => saveToFirestore(data)}
                       rows={3}
-                      className="bg-white border border-pink-200 rounded p-1.5 font-brand text-xs text-neutral-600 outline-none resize-none"
+                      className="bg-white border border-pink-200 rounded p-1.5 font-brand text-xs text-neutral-600 outline-none resize-none text-center"
                     />
                   </div>
                 ) : (
