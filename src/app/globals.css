@@ -1,7 +1,19 @@
 @import "tailwindcss";
 
+@theme {
+  --font-brand: var(--font-outfit), var(--font-geist-sans), sans-serif;
+}
+
+@utility font-brand {
+  font-family: var(--font-outfit), var(--font-geist-sans), sans-serif;
+}
+
 @utility animate-slide-up {
   animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@utility animate-slide-right {
+  animation: slideRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @utility animate-fade-in-up {
@@ -14,6 +26,11 @@
   &::-webkit-scrollbar {
     display: none; /* Chrome, Safari and Opera */
   }
+}
+
+@keyframes slideRight {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
 }
 
 @keyframes slideUp {

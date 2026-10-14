@@ -34,7 +34,7 @@ export default function CartDrawer() {
       <div className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col animate-slide-in-right">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-pink-100">
-          <h2 className="text-xl font-black text-black uppercase tracking-wider">Your Bag</h2>
+          <h2 className="text-lg font-brand font-bold text-neutral-900 uppercase tracking-wider">Your Bag</h2>
           <button 
             onClick={() => setIsCartOpen(false)}
             className="p-2 text-neutral-400 hover:text-black transition-colors"
@@ -84,7 +84,7 @@ export default function CartDrawer() {
           <div className="p-6 bg-white border-t border-pink-100 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
             <div className="flex justify-between items-center mb-6">
               <span className="text-neutral-500 font-medium">Subtotal {items.some(i => i.product.priceOnAsk) && "(+ POA)"}</span>
-              <span className="text-xl font-black text-black">€{cartTotal.toFixed(2)}</span>
+              <span className="text-xl font-brand font-bold text-neutral-900">€{cartTotal.toFixed(2)}</span>
             </div>
             <p className="text-xs text-neutral-400 mb-4 text-center">Shipping & taxes calculated at checkout.</p>
             <Link 

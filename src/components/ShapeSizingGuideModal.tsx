@@ -12,7 +12,7 @@ interface ShapeSizingGuideModalProps {
 const NAIL_SHAPES = [
   {
     name: "Almond",
-    desc: "Tapered sides that curve gently to a soft rounded point. Elegant, elongating, and our most popular look.",
+    desc: "Tapered sides that curve gently to a soft rounded point. Elegant, elongating, and our signature look.",
     icon: (
       <svg viewBox="0 0 40 70" className="w-8 h-14 mx-auto text-pink-500 fill-pink-100 stroke-current stroke-2">
         <path d="M 10 65 L 10 35 C 10 15 20 5 20 5 C 20 5 30 15 30 35 L 30 65 Z" />
@@ -48,7 +48,7 @@ const NAIL_SHAPES = [
   },
   {
     name: "Stiletto",
-    desc: "Dramatic tapering narrowing down to an ultra-sharp point. Bold, fierce, and glamorous.",
+    desc: "Dramatic tapering narrowing down to an ultra-sharp point. Bold, fierce, and glamorous statement nails.",
     icon: (
       <svg viewBox="0 0 40 70" className="w-8 h-14 mx-auto text-pink-500 fill-pink-100 stroke-current stroke-2">
         <path d="M 9 65 L 13 35 L 20 5 L 27 35 L 31 65 Z" />
@@ -66,11 +66,12 @@ const NAIL_SHAPES = [
   }
 ];
 
-const STANDARD_SIZES = [
-  { label: "XS", mm: "14mm | 11mm | 12mm | 10mm | 8mm", numbers: "3, 6, 5, 7, 9" },
-  { label: "S", mm: "15mm | 12mm | 13mm | 11mm | 8mm", numbers: "2, 5, 4, 6, 9" },
-  { label: "M", mm: "16mm | 13mm | 14mm | 12mm | 9mm", numbers: "1, 4, 3, 5, 8" },
-  { label: "L", mm: "18mm | 14mm | 15mm | 13mm | 10mm", numbers: "0, 3, 2, 4, 7" },
+const PRE_SIZED_SETS = [
+  { label: "XS", mm: "14mm, 11mm, 12mm, 10mm, 8mm" },
+  { label: "S", mm: "15mm, 12mm, 13mm, 11mm, 9mm" },
+  { label: "M", mm: "16mm, 13mm, 14mm, 12mm, 10mm" },
+  { label: "L", mm: "18mm, 14mm, 15mm, 13mm, 11mm" },
+  { label: "XL", mm: "19mm, 15mm, 16mm, 14mm, 12mm" },
 ];
 
 export default function ShapeSizingGuideModal({
@@ -99,8 +100,8 @@ export default function ShapeSizingGuideModal({
         <div className="flex items-center justify-between px-6 py-4 border-b border-pink-100 bg-[#FFF5F8]">
           <div className="flex items-center gap-3">
             <span className="text-xl">📏</span>
-            <h3 className="text-lg font-black tracking-tight text-neutral-900">
-              Shape & Sizing Guide
+            <h3 className="font-brand font-bold text-lg tracking-tight text-neutral-900">
+              UnHollyNails Sizing & Shape Guide
             </h3>
           </div>
           <button
@@ -115,24 +116,24 @@ export default function ShapeSizingGuideModal({
         <div className="flex border-b border-neutral-100 bg-white px-6 pt-3 gap-6">
           <button
             onClick={() => setActiveTab('shapes')}
-            className={`pb-3 font-bold text-sm tracking-wider uppercase transition-colors relative ${
-              activeTab === 'shapes' ? 'text-pink-600' : 'text-neutral-400 hover:text-neutral-700'
+            className={`pb-3 font-brand font-bold text-xs sm:text-sm tracking-wider uppercase transition-colors relative ${
+              activeTab === 'shapes' ? 'text-[#FF5C9D]' : 'text-neutral-400 hover:text-neutral-700'
             }`}
           >
             Nail Shapes
             {activeTab === 'shapes' && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-pink-500 rounded-full" />
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#FF5C9D] rounded-full" />
             )}
           </button>
           <button
             onClick={() => setActiveTab('sizing')}
-            className={`pb-3 font-bold text-sm tracking-wider uppercase transition-colors relative ${
-              activeTab === 'sizing' ? 'text-pink-600' : 'text-neutral-400 hover:text-neutral-700'
+            className={`pb-3 font-brand font-bold text-xs sm:text-sm tracking-wider uppercase transition-colors relative ${
+              activeTab === 'sizing' ? 'text-[#FF5C9D]' : 'text-neutral-400 hover:text-neutral-700'
             }`}
           >
-            How To Measure & Sizes
+            How To Find Your Size
             {activeTab === 'sizing' && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-pink-500 rounded-full" />
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#FF5C9D] rounded-full" />
             )}
           </button>
         </div>
@@ -141,8 +142,8 @@ export default function ShapeSizingGuideModal({
         <div className="p-6 overflow-y-auto space-y-6 flex-1 hide-scrollbar">
           {activeTab === 'shapes' ? (
             <div className="space-y-4">
-              <p className="text-xs text-neutral-500">
-                Choose the shape that best compliments your natural nail bed and lifestyle:
+              <p className="font-brand text-xs text-neutral-500">
+                Choose the shape that best compliments your natural nail bed and aesthetic:
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {NAIL_SHAPES.map((shape) => (
@@ -153,67 +154,82 @@ export default function ShapeSizingGuideModal({
                     <div className="mb-2">
                       {shape.icon}
                     </div>
-                    <h4 className="font-bold text-sm text-neutral-900 mb-1">{shape.name}</h4>
-                    <p className="text-[11px] text-neutral-500 leading-snug">{shape.desc}</p>
+                    <h4 className="font-brand font-bold text-xs sm:text-sm text-neutral-900 mb-1">{shape.name}</h4>
+                    <p className="font-brand text-[11px] text-neutral-500 leading-snug">{shape.desc}</p>
                   </div>
                 ))}
               </div>
             </div>
           ) : (
             <div className="space-y-6">
-              {/* 3-Step Measurement Guide */}
+              {/* Holly's 3 Sizing Methods */}
               <div>
-                <h4 className="font-black text-sm uppercase tracking-wider text-pink-600 mb-3">
-                  How To Measure Your Natural Nails
+                <span className="font-brand font-bold text-[10px] uppercase tracking-widest text-[#FF5C9D] block mb-1">3 Sizing Methods</span>
+                <h4 className="font-brand font-bold text-sm uppercase tracking-wide text-neutral-900 mb-3">
+                  How To Find Your Perfect Sizes
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="p-3 rounded-2xl bg-pink-50/70 border border-pink-100 flex flex-col">
-                    <span className="w-6 h-6 rounded-full bg-pink-500 text-white font-bold text-xs flex items-center justify-center mb-2">1</span>
-                    <h5 className="font-bold text-xs mb-1">Apply Tape</h5>
-                    <p className="text-[11px] text-neutral-600">Place transparent tape horizontally across the widest part of your natural nail.</p>
+                  {/* Method 1 */}
+                  <div className="p-3.5 rounded-2xl bg-gradient-to-b from-pink-50 to-white border-2 border-pink-200 flex flex-col justify-between">
+                    <div>
+                      <span className="bg-[#FF5C9D] text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider inline-block mb-2">1. Sizing Kit</span>
+                      <h5 className="font-brand font-bold text-xs text-neutral-900 mb-1">Numbered Tips</h5>
+                      <p className="font-brand text-[11px] text-neutral-600 leading-relaxed mb-2">Try on blank numbered tips for 100% precision.</p>
+                    </div>
+                    <span className="font-brand font-bold text-[10px] text-pink-700 bg-pink-100/70 p-1.5 rounded-lg text-center">
+                      🎁 €5 back on 1st custom order!
+                    </span>
                   </div>
-                  <div className="p-3 rounded-2xl bg-pink-50/70 border border-pink-100 flex flex-col">
-                    <span className="w-6 h-6 rounded-full bg-pink-500 text-white font-bold text-xs flex items-center justify-center mb-2">2</span>
-                    <h5 className="font-bold text-xs mb-1">Mark Sidewalls</h5>
-                    <p className="text-[11px] text-neutral-600">Use a pen to mark the exact edge on both sides where your nail meets the skin.</p>
+
+                  {/* Method 2 */}
+                  <div className="p-3.5 rounded-2xl bg-white border border-pink-100 flex flex-col justify-between">
+                    <div>
+                      <span className="bg-neutral-100 text-neutral-700 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider inline-block mb-2">2. Tape Method</span>
+                      <h5 className="font-brand font-bold text-xs text-neutral-900 mb-1">Masking Tape</h5>
+                      <p className="font-brand text-[11px] text-neutral-600 leading-relaxed">Place tape across widest part, mark edges with pen, count millimeters (mm) against a ruler.</p>
+                    </div>
                   </div>
-                  <div className="p-3 rounded-2xl bg-pink-50/70 border border-pink-100 flex flex-col">
-                    <span className="w-6 h-6 rounded-full bg-pink-500 text-white font-bold text-xs flex items-center justify-center mb-2">3</span>
-                    <h5 className="font-bold text-xs mb-1">Measure Millimeters</h5>
-                    <p className="text-[11px] text-neutral-600">Peel the tape off and place it against a metric ruler. Measure the distance in millimeters (mm).</p>
+
+                  {/* Method 3 */}
+                  <div className="p-3.5 rounded-2xl bg-white border border-pink-100 flex flex-col justify-between">
+                    <div>
+                      <span className="bg-neutral-100 text-neutral-700 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider inline-block mb-2">3. Coin Photo</span>
+                      <h5 className="font-brand font-bold text-xs text-neutral-900 mb-1">Photo In DMs</h5>
+                      <p className="font-brand text-[11px] text-neutral-600 leading-relaxed">Hand flat next to any Euro coin (aerial photo). Send 4 photos to @unhollynails DMs to map digitally!</p>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Standard Sizes Table */}
+              {/* Pre-Sized Sets Chart (XS, S, M, L, XL) */}
               <div>
-                <h4 className="font-black text-sm uppercase tracking-wider text-neutral-900 mb-2">
-                  Standard Sizing Chart (Thumb to Pinky)
+                <h4 className="font-brand font-bold text-xs uppercase tracking-wider text-neutral-900 mb-2">
+                  Pre Sized Sets (Thumb to Pinky)
                 </h4>
                 <div className="divide-y divide-pink-100 border border-pink-100 rounded-2xl overflow-hidden bg-white">
-                  {STANDARD_SIZES.map((size) => (
-                    <div key={size.label} className="p-3 flex items-center justify-between hover:bg-pink-50/30 transition">
+                  {PRE_SIZED_SETS.map((size) => (
+                    <div key={size.label} className="p-2.5 sm:p-3 flex items-center justify-between hover:bg-pink-50/30 transition">
                       <div className="flex items-center gap-3">
-                        <span className="w-8 h-8 rounded-xl bg-pink-100 text-pink-700 font-black text-xs flex items-center justify-center">
+                        <span className="w-7 h-7 rounded-lg bg-pink-100 text-pink-700 font-brand font-bold text-xs flex items-center justify-center">
                           {size.label}
                         </span>
-                        <div>
-                          <p className="font-bold text-xs text-neutral-800">{size.mm}</p>
-                          <p className="text-[10px] text-neutral-400">Tip Sizes: {size.numbers}</p>
-                        </div>
+                        <p className="font-brand font-bold text-xs text-neutral-800">{size.mm}</p>
                       </div>
                     </div>
                   ))}
                 </div>
+                <p className="text-[10px] text-neutral-400 italic mt-1.5 text-center font-brand">
+                  *If you measure between sizes, size up! Measurements are the client&apos;s responsibility.
+                </p>
               </div>
 
               {/* Tip Callout */}
-              <div className="p-4 rounded-2xl bg-pink-50 border border-pink-200 flex items-start gap-3">
+              <div className="p-3.5 rounded-2xl bg-pink-50 border border-pink-200 flex items-start gap-3">
                 <span className="text-xl">✨</span>
                 <div>
-                  <h5 className="font-bold text-xs text-pink-900 mb-0.5">Custom Sizing in Profile</h5>
-                  <p className="text-[11px] text-pink-700 leading-relaxed">
-                    Don’t match standard sizes? You can enter your exact mm measurements for each finger in your <Link href="/profile" className="font-black underline" onClick={onClose}>Client Profile</Link> and select &ldquo;✨ Use My Saved Sizes ✨&rdquo; on any order!
+                  <h5 className="font-brand font-bold text-xs text-pink-900 mb-0.5">Save Custom Measurements in Profile</h5>
+                  <p className="font-brand text-[11px] text-pink-700 leading-relaxed">
+                    Don’t match standard sizes? Save your exact mm sizes in your <Link href="/profile" className="font-bold underline" onClick={onClose}>Client Profile</Link> and click &ldquo;✨ Use My Saved Sizes ✨&rdquo; on any design!
                   </p>
                 </div>
               </div>
@@ -222,12 +238,15 @@ export default function ShapeSizingGuideModal({
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-neutral-50 border-t border-neutral-100 flex justify-end">
+        <div className="p-4 bg-neutral-50 border-t border-neutral-100 flex justify-between items-center">
+          <Link href="/guides" onClick={onClose} className="font-brand text-xs text-pink-600 font-bold hover:underline">
+            View Full Guide & Prep Instructions →
+          </Link>
           <button
             onClick={onClose}
-            className="px-6 py-2.5 rounded-full bg-black text-white font-bold text-xs uppercase tracking-wider hover:bg-neutral-800 transition shadow"
+            className="px-6 py-2 rounded-full bg-neutral-900 text-white font-brand font-bold text-xs uppercase tracking-wider hover:bg-[#FF5C9D] transition shadow"
           >
-            Got It
+            Close
           </button>
         </div>
       </div>

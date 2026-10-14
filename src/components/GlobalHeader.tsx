@@ -9,13 +9,40 @@ import { onAuthStateChanged, User, signOut, signInWithPopup, GoogleAuthProvider 
 import { auth, db } from "@/lib/firebase";
 import { collection, getDocs, doc, getDoc, setDoc } from "firebase/firestore";
 
+const CORE_TAGS = [
+  'home', 
+  'all', 
+  'special-offers', 
+  'Sets', 
+  'Minis', 
+  'Keychains', 
+  'Earrings', 
+  'Accessories', 
+  'Basics',
+  'menu',
+  'bundles',
+  'mystery-boxes',
+  'club',
+  'guides',
+  'policies'
+];
+
 export default function GlobalHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const { itemCount, setIsCartOpen } = useCart();
-  const { editMode, setEditMode } = useAdmin();
+  const { 
+    editMode, 
+    setEditMode, 
+    pageTitle, 
+    isSaving, 
+    lastSaved, 
+    saveHandler, 
+    resetHandler 
+  } = useAdmin();
   const [user, setUser] = useState<User | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [studioDropdownOpen, setStudioDropdownOpen] = useState(false);
   
   const [allCollections, setAllCollections] = useState<{tag: string, title: string, inRibbon: boolean}[]>([]);
   const [ribbonOrder, setRibbonOrder] = useState<string[]>([]);
@@ -33,6 +60,17 @@ export default function GlobalHeader() {
     });
     return () => unsub();
   }, []);
+
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isMobileMenuOpen]);
 
   useEffect(() => {
     const fetchRibbon = async () => {
@@ -140,7 +178,7 @@ export default function GlobalHeader() {
     setRibbonOrder(newOrder);
     await saveRibbonOrder(newOrder);
     
-    if (!['home', 'all', 'Sets', 'Minis', 'Keychains', 'Earrings', 'Accessories', 'Basics'].includes(tagToRemove)) {
+    if (!CORE_TAGS.includes(tagToRemove)) {
       try {
         const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
         const metaDoc = await getDoc(doc(db, "users", vendorUid, "collection_settings", tagToRemove));
@@ -158,7 +196,7 @@ export default function GlobalHeader() {
       const newOrder = [...ribbonOrder, tagToAdd];
       setRibbonOrder(newOrder);
       await saveRibbonOrder(newOrder);
-      if (!['home', 'all', 'Sets', 'Minis', 'Keychains', 'Earrings', 'Accessories', 'Basics'].includes(tagToAdd)) {
+      if (!CORE_TAGS.includes(tagToAdd)) {
         try {
           const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
           await setDoc(doc(db, "users", vendorUid, "collection_settings", tagToAdd), { inRibbon: true }, { merge: true });
@@ -219,6 +257,12 @@ export default function GlobalHeader() {
       const custom = allCollections.find(c => c.tag === 'special-offers');
       return { title: custom?.title || 'SPECIAL OFFERS', href: '/collections/special-offers' };
     }
+    if (tag === 'menu') return { title: 'PRICE MENU', href: '/menu' };
+    if (tag === 'bundles') return { title: 'BUNDLES', href: '/bundles' };
+    if (tag === 'mystery-boxes') return { title: 'MYSTERY BOXES', href: '/mystery-boxes' };
+    if (tag === 'club') return { title: 'VIP CLUB', href: '/club' };
+    if (tag === 'guides') return { title: 'SIZING & CARE', href: '/guides' };
+    if (tag === 'policies') return { title: 'POLICIES', href: '/policies' };
     if (['Sets', 'Minis', 'Keychains', 'Earrings', 'Accessories', 'Basics'].includes(tag)) {
       return { title: tag.toUpperCase(), href: `/collections/${tag}` };
     }
@@ -227,7 +271,7 @@ export default function GlobalHeader() {
     return { title: tag.toUpperCase(), href: `/collections/${tag}` };
   };
 
-  const coreTags = ['home', 'all', 'special-offers', 'Sets', 'Minis', 'Keychains', 'Earrings', 'Accessories', 'Basics'];
+  const coreTags = CORE_TAGS;
   const hiddenCollections = allCollections.filter(c => !ribbonOrder.includes(c.tag) && !coreTags.map(t=>t.toLowerCase()).includes(c.tag.toLowerCase()));
   const hiddenCoreTags = coreTags.filter(t => !ribbonOrder.includes(t));
 
@@ -235,18 +279,94 @@ export default function GlobalHeader() {
     <>
       <header className="sticky top-0 z-40 bg-white/70 backdrop-blur-xl shadow-sm border-b border-pink-100/50 w-full">
         {isAdmin && (
-          <div className="bg-black text-white text-xs py-1.5 px-4 sm:px-6 flex justify-between items-center w-full">
-            <div className="flex items-center gap-4 sm:gap-6">
-              <span className="font-bold tracking-widest uppercase hidden sm:inline">Admin Active</span>
-              <label className="flex items-center gap-2 cursor-pointer hover:text-pink-300 transition-colors font-bold">
-                <input type="checkbox" checked={editMode} onChange={e => setEditMode(e.target.checked)} className="accent-pink-500 w-3.5 h-3.5" />
-                Enable Edit Mode
-              </label>
-              <Link href="/admin" className="text-pink-300 hover:text-white transition-colors underline underline-offset-2">
-                Go to Dashboard →
-              </Link>
+          <aside aria-label="Admin Control Bar" className="bg-gradient-to-r from-neutral-950 via-neutral-900 to-pink-950 text-white text-xs py-2 px-3 sm:px-6 border-b border-pink-500/30 w-full transition-all">
+            <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2.5">
+              
+              {/* Left Side: Admin State & Edit Toggle */}
+              <div className="flex items-center gap-2.5 sm:gap-4 flex-wrap">
+                <span className="flex items-center gap-1.5 font-bold tracking-widest uppercase text-[10px] text-pink-300">
+                  <span className="flex h-2 w-2 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#FF5C9D]"></span>
+                  </span>
+                  Admin Active
+                </span>
+
+                <label className="flex items-center gap-1.5 cursor-pointer hover:text-pink-200 transition-colors font-bold text-xs bg-white/10 hover:bg-white/15 px-2.5 py-1 rounded-full border border-white/10 select-none">
+                  <input
+                    type="checkbox"
+                    checked={editMode}
+                    onChange={e => setEditMode(e.target.checked)}
+                    className="accent-pink-500 w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <span>Enable Edit Mode</span>
+                </label>
+
+                {editMode && pageTitle && (
+                  <span className="font-bold text-[10px] uppercase tracking-wider text-white bg-pink-950/80 border border-pink-500/40 px-2.5 py-0.5 rounded-full">
+                    Editing: {pageTitle}
+                  </span>
+                )}
+              </div>
+
+              {/* Right Side: Page Controls, Status & Dashboard */}
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                {editMode && (
+                  <>
+                    {/* Save Status Feedback */}
+                    {isSaving && (
+                      <span className="text-[11px] text-amber-300 flex items-center gap-1 font-semibold">
+                        <svg className="animate-spin h-3 w-3 text-amber-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                        </svg>
+                        Saving...
+                      </span>
+                    )}
+                    {lastSaved && !isSaving && (
+                      <span className="text-[11px] text-emerald-400 font-semibold hidden sm:inline">
+                        ✓ All changes saved
+                      </span>
+                    )}
+
+                    {/* Action: Save Now (if page provided saveHandler) */}
+                    {saveHandler && (
+                      <button
+                        onClick={() => saveHandler()}
+                        disabled={isSaving}
+                        className="bg-[#FF5C9D] hover:bg-pink-600 disabled:opacity-50 text-white font-bold text-xs px-3 py-1 rounded-full transition shadow-sm cursor-pointer"
+                      >
+                        Save Now
+                      </button>
+                    )}
+
+                    {/* Action: Reset Defaults (if page provided resetHandler) */}
+                    {resetHandler && (
+                      <button
+                        onClick={() => {
+                          if (confirm(`Reset ${pageTitle || 'this page'} to original defaults? This will overwrite your custom text.`)) {
+                            resetHandler();
+                          }
+                        }}
+                        className="bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-medium text-[11px] px-2.5 py-1 rounded-full transition border border-neutral-700 cursor-pointer"
+                        title="Reset page text back to original template"
+                      >
+                        Reset Defaults
+                      </button>
+                    )}
+                  </>
+                )}
+
+                <Link
+                  href="/admin"
+                  className="text-pink-300 hover:text-white transition-colors underline underline-offset-2 text-xs font-bold whitespace-nowrap ml-1"
+                >
+                  Dashboard →
+                </Link>
+              </div>
+
             </div>
-          </div>
+          </aside>
         )}
         <div className="max-w-7xl mx-auto w-full flex flex-col">
           {/* Top Bar: Utilities & Mobile Menu Toggle */}
@@ -286,7 +406,7 @@ export default function GlobalHeader() {
           </div>
           
           {/* Ribbon Navigation (Desktop Only) */}
-          <div className="hidden md:flex justify-center gap-6 overflow-x-auto hide-scrollbar items-center px-6 pb-3 pt-1 w-full border-t border-pink-50/50 relative">
+          <div className="hidden md:flex justify-center gap-6 overflow-visible items-center px-6 pb-3 pt-1 w-full border-t border-pink-50/50 relative">
             {ribbonOrder.map((tag, index) => {
               const { title, href } = getLinkDetails(tag);
               return (
@@ -307,6 +427,132 @@ export default function GlobalHeader() {
                 </div>
               );
             })}
+
+            {/* Studio Dropdown (Desktop) */}
+            <div 
+              className="relative group py-1"
+              onMouseEnter={() => setStudioDropdownOpen(true)}
+              onMouseLeave={() => setStudioDropdownOpen(false)}
+            >
+              <button 
+                type="button"
+                onClick={() => setStudioDropdownOpen(!studioDropdownOpen)}
+                className={`flex items-center gap-1.5 text-xs font-bold transition-colors whitespace-nowrap uppercase tracking-[0.2em] cursor-pointer ${
+                  ['/menu', '/bundles', '/mystery-boxes', '/club', '/guides', '/policies', '/contact', '/about'].includes(pathname)
+                    ? 'text-[#FF5C9D]' 
+                    : 'text-neutral-500 hover:text-black'
+                }`}
+              >
+                <span>STUDIO</span>
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  viewBox="0 0 20 20" 
+                  fill="currentColor" 
+                  className={`w-3.5 h-3.5 transition-transform duration-200 ${studioDropdownOpen ? 'rotate-180 text-[#FF5C9D]' : 'text-neutral-400 group-hover:text-black'}`}
+                >
+                  <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                </svg>
+              </button>
+
+              {/* Dropdown Panel */}
+              {studioDropdownOpen && (
+                <div className="absolute top-full left-1/2 -translate-x-1/2 pt-2 z-50 w-72 animate-in fade-in duration-150">
+                  <div className="bg-white/95 backdrop-blur-xl border border-pink-100 rounded-2xl shadow-xl shadow-pink-500/10 p-2.5 flex flex-col gap-0.5">
+                    <span className="text-[10px] font-black uppercase tracking-[0.25em] text-[#FF5C9D] px-3 pt-2 pb-1">
+                      The Studio
+                    </span>
+                    <Link
+                      href="/menu"
+                      onClick={() => setStudioDropdownOpen(false)}
+                      className={`flex flex-col px-3 py-2 rounded-xl transition-colors ${
+                        isActive('/menu') ? 'bg-pink-50 text-[#FF5C9D]' : 'hover:bg-pink-50/70 text-neutral-800 hover:text-black'
+                      }`}
+                    >
+                      <span className="text-xs font-bold">Price List Menu</span>
+                      <span className="text-[10px] text-neutral-500 font-medium">Bespoke nail art & services</span>
+                    </Link>
+                    <Link
+                      href="/bundles"
+                      onClick={() => setStudioDropdownOpen(false)}
+                      className={`flex flex-col px-3 py-2 rounded-xl transition-colors ${
+                        isActive('/bundles') ? 'bg-pink-50 text-[#FF5C9D]' : 'hover:bg-pink-50/70 text-neutral-800 hover:text-black'
+                      }`}
+                    >
+                      <span className="text-xs font-bold">Gift Bundles</span>
+                      <span className="text-[10px] text-neutral-500 font-medium">Curated luxury gift packs</span>
+                    </Link>
+                    <Link
+                      href="/mystery-boxes"
+                      onClick={() => setStudioDropdownOpen(false)}
+                      className={`flex flex-col px-3 py-2 rounded-xl transition-colors ${
+                        isActive('/mystery-boxes') ? 'bg-pink-50 text-[#FF5C9D]' : 'hover:bg-pink-50/70 text-neutral-800 hover:text-black'
+                      }`}
+                    >
+                      <span className="text-xs font-bold">Mystery Boxes</span>
+                      <span className="text-[10px] text-neutral-500 font-medium">Surprise press-on sets & extras</span>
+                    </Link>
+                    <Link
+                      href="/club"
+                      onClick={() => setStudioDropdownOpen(false)}
+                      className={`flex flex-col px-3 py-2 rounded-xl transition-colors ${
+                        isActive('/club') ? 'bg-pink-50 text-[#FF5C9D]' : 'hover:bg-pink-50/70 text-neutral-800 hover:text-black'
+                      }`}
+                    >
+                      <span className="text-xs font-bold">VIP Club & Rewards</span>
+                      <span className="text-[10px] text-neutral-500 font-medium">Birthday treats & member perks</span>
+                    </Link>
+
+                    <div className="h-px bg-pink-100/80 my-1"></div>
+
+                    <Link
+                      href="/guides"
+                      onClick={() => setStudioDropdownOpen(false)}
+                      className={`flex flex-col px-3 py-2 rounded-xl transition-colors ${
+                        isActive('/guides') ? 'bg-pink-50 text-[#FF5C9D]' : 'hover:bg-pink-50/70 text-neutral-800 hover:text-black'
+                      }`}
+                    >
+                      <span className="text-xs font-bold">Sizing & Care Guides</span>
+                      <span className="text-[10px] text-neutral-500 font-medium">Sizing kits, coin photo & wear guide</span>
+                    </Link>
+                    <Link
+                      href="/policies"
+                      onClick={() => setStudioDropdownOpen(false)}
+                      className={`flex flex-col px-3 py-2 rounded-xl transition-colors ${
+                        isActive('/policies') ? 'bg-pink-50 text-[#FF5C9D]' : 'hover:bg-pink-50/70 text-neutral-800 hover:text-black'
+                      }`}
+                    >
+                      <span className="text-xs font-bold">Store Policies & Shipping</span>
+                      <span className="text-[10px] text-neutral-500 font-medium">Turnaround times & hygiene rules</span>
+                    </Link>
+                    <Link
+                      href="/about"
+                      onClick={() => setStudioDropdownOpen(false)}
+                      className={`flex flex-col px-3 py-2 rounded-xl transition-colors ${
+                        isActive('/about') ? 'bg-pink-50 text-[#FF5C9D]' : 'hover:bg-pink-50/70 text-neutral-800 hover:text-black'
+                      }`}
+                    >
+                      <span className="text-xs font-bold">About The Studio</span>
+                      <span className="text-[10px] text-neutral-500 font-medium">Holly's story & hand-painted craft</span>
+                    </Link>
+
+                    <div className="h-px bg-pink-100/80 my-1"></div>
+
+                    <a
+                      href="https://ig.me/m/unholly-nails"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setStudioDropdownOpen(false)}
+                      className="flex items-center justify-between px-3 py-2 rounded-xl bg-pink-50/70 hover:bg-pink-100 text-[#FF5C9D] transition-colors"
+                    >
+                      <span className="text-xs font-bold">DM on Instagram</span>
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
             
             {editMode && (
               <button onClick={() => setShowAddMenu(true)} className="w-6 h-6 flex-shrink-0 flex items-center justify-center bg-black text-white rounded-full hover:bg-pink-500 transition-colors text-lg leading-none font-bold ml-2">
@@ -314,64 +560,304 @@ export default function GlobalHeader() {
               </button>
             )}
           </div>
-
-          {/* Mobile Dropdown Menu */}
-          {isMobileMenuOpen && (
-            <div className="md:hidden absolute top-full left-0 w-full bg-white border-t border-pink-100 shadow-xl flex flex-col py-2 px-4 gap-2 z-50 max-h-[80vh] overflow-y-auto">
-              {ribbonOrder.map((tag, index) => {
-                const { title, href } = getLinkDetails(tag);
-                return (
-                  <div key={tag} className="flex justify-between items-center py-2 px-2 hover:bg-pink-50 rounded-lg">
-                    <Link href={href} onClick={() => setIsMobileMenuOpen(false)} className={`flex-1 text-sm font-bold transition-colors uppercase tracking-widest ${isActive(href) ? 'text-[#FF5C9D]' : 'text-neutral-700 hover:text-black'}`}>
-                      {title}
-                    </Link>
-                    {editMode && (
-                      <div className="flex items-center gap-1">
-                        <button 
-                          onClick={(e) => {
-                            e.preventDefault();
-                            if (index > 0) {
-                              const newOrder = [...ribbonOrder];
-                              [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
-                              setRibbonOrder(newOrder);
-                              saveRibbonOrder(newOrder);
-                            }
-                          }}
-                          disabled={index === 0}
-                          className="p-2 text-neutral-400 hover:text-black disabled:opacity-30"
-                        >
-                          ↑
-                        </button>
-                        <button 
-                          onClick={(e) => {
-                            e.preventDefault();
-                            if (index < ribbonOrder.length - 1) {
-                              const newOrder = [...ribbonOrder];
-                              [newOrder[index + 1], newOrder[index]] = [newOrder[index], newOrder[index + 1]];
-                              setRibbonOrder(newOrder);
-                              saveRibbonOrder(newOrder);
-                            }
-                          }}
-                          disabled={index === ribbonOrder.length - 1}
-                          className="p-2 text-neutral-400 hover:text-black disabled:opacity-30"
-                        >
-                          ↓
-                        </button>
-                        <button onClick={(e) => { e.preventDefault(); setShowConfirmHide(tag); setIsMobileMenuOpen(false); }} className="text-neutral-400 hover:text-red-500 p-2 ml-1" title="Remove from ribbon">✕</button>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-              {editMode && (
-                <button onClick={() => { setShowAddMenu(true); setIsMobileMenuOpen(false); }} className="mt-2 py-3 bg-black text-white rounded-xl text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2">
-                  <span>+ Manage Pages</span>
-                </button>
-              )}
-            </div>
-          )}
         </div>
       </header>
+
+      {/* Mobile Drawer (Full Slide-over Sheet with Backdrop) */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-[100] md:hidden flex justify-start">
+          {/* Dimmed backdrop blur */}
+          <div 
+            className="fixed inset-0 bg-neutral-950/60 backdrop-blur-sm transition-opacity"
+            onClick={() => setIsMobileMenuOpen(false)}
+            aria-hidden="true"
+          />
+
+          {/* Drawer Sheet */}
+          <div className="relative w-[85vw] max-w-[320px] h-[100dvh] bg-white shadow-2xl flex flex-col z-10 animate-slide-right overflow-hidden">
+            
+            {/* Drawer Header: Logo + Close */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-pink-100/70 bg-gradient-to-r from-pink-50/40 via-white to-pink-50/20 flex-shrink-0">
+              <Link 
+                href="/" 
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="flex items-center"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo_cropped.png" alt="UnHolly Nails" className="h-7 w-auto object-contain" />
+              </Link>
+
+              <button 
+                type="button"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="p-2 text-neutral-500 hover:text-black rounded-full hover:bg-neutral-100 transition-colors cursor-pointer"
+                aria-label="Close Menu"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Drawer Scrollable Body */}
+            <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
+              
+              {/* Tier 1: SHOP COLLECTIONS */}
+              <div>
+                <div className="flex items-center justify-between mb-2 px-1">
+                  <span className="text-[10px] font-black uppercase tracking-[0.25em] text-neutral-400">
+                    Shop
+                  </span>
+                  {editMode && (
+                    <span className="text-[10px] text-pink-500 font-bold">Edit Order</span>
+                  )}
+                </div>
+                <div className="space-y-0.5">
+                  {ribbonOrder.map((tag, index) => {
+                    const { title, href } = getLinkDetails(tag);
+                    return (
+                      <div key={tag} className="flex justify-between items-center group rounded-xl hover:bg-pink-50/70 transition-colors">
+                        <Link 
+                          href={href} 
+                          onClick={() => setIsMobileMenuOpen(false)} 
+                          className={`flex-1 py-2 px-3 text-xs font-bold uppercase tracking-wider transition-colors flex items-center justify-between ${
+                            isActive(href) ? 'text-[#FF5C9D]' : 'text-neutral-800 group-hover:text-black'
+                          }`}
+                        >
+                          <span>{title}</span>
+                          {isActive(href) && (
+                            <span className="h-1.5 w-1.5 rounded-full bg-[#FF5C9D]"></span>
+                          )}
+                        </Link>
+
+                        {editMode && (
+                          <div className="flex items-center gap-0.5 pr-2">
+                            <button 
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                if (index > 0) {
+                                  const newOrder = [...ribbonOrder];
+                                  [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+                                  setRibbonOrder(newOrder);
+                                  saveRibbonOrder(newOrder);
+                                }
+                              }}
+                              disabled={index === 0}
+                              className="p-1.5 text-neutral-400 hover:text-black disabled:opacity-20 text-xs cursor-pointer"
+                            >
+                              ↑
+                            </button>
+                            <button 
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                if (index < ribbonOrder.length - 1) {
+                                  const newOrder = [...ribbonOrder];
+                                  [newOrder[index + 1], newOrder[index]] = [newOrder[index], newOrder[index + 1]];
+                                  setRibbonOrder(newOrder);
+                                  saveRibbonOrder(newOrder);
+                                }
+                              }}
+                              disabled={index === ribbonOrder.length - 1}
+                              className="p-1.5 text-neutral-400 hover:text-black disabled:opacity-20 text-xs cursor-pointer"
+                            >
+                              ↓
+                            </button>
+                            <button 
+                              type="button"
+                              onClick={(e) => { e.preventDefault(); setShowConfirmHide(tag); setIsMobileMenuOpen(false); }} 
+                              className="text-neutral-300 hover:text-red-500 p-1.5 text-xs cursor-pointer" 
+                              title="Remove from ribbon"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {editMode && (
+                  <button 
+                    type="button"
+                    onClick={() => { setShowAddMenu(true); setIsMobileMenuOpen(false); }} 
+                    className="mt-2.5 w-full py-2 bg-neutral-900 hover:bg-black text-white rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <span>+ Add / Manage Collections</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Tier 2: THE STUDIO (2x2 Grid of Bespoke Offerings) */}
+              <div>
+                <div className="flex items-center justify-between mb-2.5 px-1">
+                  <span className="text-[10px] font-black uppercase tracking-[0.25em] text-[#FF5C9D]">
+                    Studio
+                  </span>
+                  <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest">
+                    Bespoke & Specials
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Link 
+                    href="/menu" 
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`p-3 rounded-2xl border transition flex flex-col justify-between min-h-[72px] ${
+                      isActive('/menu')
+                        ? 'bg-pink-100/70 border-pink-300 text-[#FF5C9D]'
+                        : 'bg-pink-50/50 hover:bg-pink-50 border-pink-100/80 text-neutral-800'
+                    }`}
+                  >
+                    <span className="text-xs font-bold">Price Menu</span>
+                    <span className="text-[10px] text-neutral-500 font-medium">Bespoke sets & art</span>
+                  </Link>
+
+                  <Link 
+                    href="/bundles" 
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`p-3 rounded-2xl border transition flex flex-col justify-between min-h-[72px] ${
+                      isActive('/bundles')
+                        ? 'bg-pink-100/70 border-pink-300 text-[#FF5C9D]'
+                        : 'bg-pink-50/50 hover:bg-pink-50 border-pink-100/80 text-neutral-800'
+                    }`}
+                  >
+                    <span className="text-xs font-bold">Gift Bundles</span>
+                    <span className="text-[10px] text-neutral-500 font-medium">Curated packs & kits</span>
+                  </Link>
+
+                  <Link 
+                    href="/mystery-boxes" 
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`p-3 rounded-2xl border transition flex flex-col justify-between min-h-[72px] ${
+                      isActive('/mystery-boxes')
+                        ? 'bg-pink-100/70 border-pink-300 text-[#FF5C9D]'
+                        : 'bg-pink-50/50 hover:bg-pink-50 border-pink-100/80 text-neutral-800'
+                    }`}
+                  >
+                    <span className="text-xs font-bold">Mystery Boxes</span>
+                    <span className="text-[10px] text-neutral-500 font-medium">Surprise press-ons</span>
+                  </Link>
+
+                  <Link 
+                    href="/club" 
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`p-3 rounded-2xl border transition flex flex-col justify-between min-h-[72px] ${
+                      isActive('/club')
+                        ? 'bg-pink-100/70 border-pink-300 text-[#FF5C9D]'
+                        : 'bg-pink-50/50 hover:bg-pink-50 border-pink-100/80 text-neutral-800'
+                    }`}
+                  >
+                    <span className="text-xs font-bold">VIP Club</span>
+                    <span className="text-[10px] text-neutral-500 font-medium">Rewards & perks</span>
+                  </Link>
+                </div>
+              </div>
+
+              {/* Tier 3: STUDIO INFO & CARE */}
+              <div>
+                <div className="flex items-center justify-between mb-2 px-1">
+                  <span className="text-[10px] font-black uppercase tracking-[0.25em] text-neutral-400">
+                    Help & Info
+                  </span>
+                </div>
+
+                <div className="space-y-1">
+                  <Link 
+                    href="/guides" 
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`flex items-center justify-between py-2 px-3 rounded-xl text-xs font-medium transition-colors ${
+                      isActive('/guides') ? 'bg-pink-50 text-[#FF5C9D] font-bold' : 'text-neutral-600 hover:text-black hover:bg-neutral-50'
+                    }`}
+                  >
+                    <span>Sizing & Application Guides</span>
+                    <svg className="w-3.5 h-3.5 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Link>
+
+                  <Link 
+                    href="/policies" 
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`flex items-center justify-between py-2 px-3 rounded-xl text-xs font-medium transition-colors ${
+                      isActive('/policies') ? 'bg-pink-50 text-[#FF5C9D] font-bold' : 'text-neutral-600 hover:text-black hover:bg-neutral-50'
+                    }`}
+                  >
+                    <span>Store Policies & Shipping</span>
+                    <svg className="w-3.5 h-3.5 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Link>
+
+                  <Link 
+                    href="/about" 
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`flex items-center justify-between py-2 px-3 rounded-xl text-xs font-medium transition-colors ${
+                      isActive('/about') ? 'bg-pink-50 text-[#FF5C9D] font-bold' : 'text-neutral-600 hover:text-black hover:bg-neutral-50'
+                    }`}
+                  >
+                    <span>About The Studio</span>
+                    <svg className="w-3.5 h-3.5 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Link>
+
+                  <Link 
+                    href="/contact" 
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`flex items-center justify-between py-2 px-3 rounded-xl text-xs font-medium transition-colors ${
+                      isActive('/contact') ? 'bg-pink-50 text-[#FF5C9D] font-bold' : 'text-neutral-600 hover:text-black hover:bg-neutral-50'
+                    }`}
+                  >
+                    <span>Contact & DM Holly</span>
+                    <svg className="w-3.5 h-3.5 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Link>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Drawer Footer: User / Auth Controls */}
+            <div className="p-4 border-t border-pink-100 bg-neutral-50/60 flex-shrink-0 mt-auto">
+              {!user ? (
+                <button 
+                  type="button"
+                  onClick={() => { setIsMobileMenuOpen(false); handleSignIn(); }}
+                  className="w-full py-2.5 px-4 bg-neutral-900 hover:bg-black text-white text-xs font-bold rounded-xl uppercase tracking-widest transition shadow-sm cursor-pointer"
+                >
+                  Sign In
+                </button>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <Link 
+                    href="/profile" 
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="flex items-center gap-2 text-xs font-bold text-neutral-800 hover:text-[#FF5C9D] transition"
+                  >
+                    <div className="w-7 h-7 rounded-full bg-pink-100 text-[#FF5C9D] flex items-center justify-center font-black text-xs">
+                      {user.email ? user.email.charAt(0).toUpperCase() : 'U'}
+                    </div>
+                    <span className="truncate max-w-[150px]">{user.displayName || user.email || 'My Account'}</span>
+                  </Link>
+
+                  <button 
+                    type="button"
+                    onClick={() => { setIsMobileMenuOpen(false); handleLogout(); }}
+                    className="text-[11px] font-bold text-pink-500 hover:text-pink-700 bg-pink-50 px-3 py-1.5 rounded-full border border-pink-100 transition cursor-pointer"
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* Global Modals for Ribbon Manager */}
       {/* 1. Add Page Modal */}

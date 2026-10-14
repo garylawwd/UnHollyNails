@@ -6,6 +6,8 @@ import { collection, collectionGroup, getDocs, doc, writeBatch, setDoc, getDoc, 
 import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User } from "firebase/auth";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, auth, storage } from "@/lib/firebase";
+import { useRouter } from "next/navigation";
+import { useAdmin } from "@/context/AdminContext";
 import { Product } from "@/lib/types";
 
 interface CollectionMeta {
@@ -30,7 +32,9 @@ export default function AdminDashboard() {
   const [user, setUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   
-  const [activeTab, setActiveTab] = useState<"inventory" | "collections">("inventory");
+  const router = useRouter();
+  const { setEditMode } = useAdmin();
+  const [activeTab, setActiveTab] = useState<"inventory" | "collections" | "studio">("inventory");
   
   const [inventory, setInventory] = useState<Product[]>([]);
   const [inventoryFilter, setInventoryFilter] = useState<string>("All");
@@ -49,6 +53,11 @@ export default function AdminDashboard() {
 
   const confirmModal = (title: string, message: string, onConfirm: () => void) => {
     setModalState({ isOpen: true, title, message, isConfirm: true, onConfirm });
+  };
+
+  const handleOpenPageInEditMode = (route: string) => {
+    setEditMode(true);
+    router.push(route);
   };
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [savingCollection, setSavingCollection] = useState(false);
@@ -402,6 +411,12 @@ export default function AdminDashboard() {
             >
               Collections
             </button>
+            <button 
+              onClick={() => setActiveTab("studio")}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg active:scale-95 transition-all ${activeTab === "studio" ? "bg-black text-white shadow-md ring-2 ring-black ring-offset-2 ring-offset-neutral-100" : "bg-white text-neutral-600 shadow-sm border border-neutral-200"}`}
+            >
+              Studio & Pricing
+            </button>
           </div>
         </div>
 
@@ -429,6 +444,12 @@ export default function AdminDashboard() {
             className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition ${activeTab === "collections" ? "bg-black text-white" : "text-neutral-600 hover:bg-neutral-100"}`}
           >
             🎨 Collection Pages
+          </button>
+          <button 
+            onClick={() => { setActiveTab("studio"); setMobileMenuOpen(false); }}
+            className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition ${activeTab === "studio" ? "bg-black text-white" : "text-neutral-600 hover:bg-neutral-100"}`}
+          >
+            ✨ Studio Pages & Pricing
           </button>
         </nav>
         <div className="p-4 border-t">
@@ -824,6 +845,113 @@ export default function AdminDashboard() {
                   </form>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* STUDIO PAGES & PRICING TAB */}
+        {activeTab === "studio" && (
+          <div className="p-4 sm:p-8 max-w-6xl mx-auto">
+            <header className="mb-8">
+              <span className="text-xs font-bold text-[#FF5C9D] uppercase tracking-widest block mb-1">Live Storefront Editing</span>
+              <h2 className="text-2xl sm:text-3xl font-black text-neutral-900 tracking-tight">Studio Pages, Pricing & Guides</h2>
+              <p className="text-sm text-neutral-500 max-w-2xl mt-1">
+                Click any page below to open it in <strong>Live Edit Mode</strong>. You can click into any price, title, or description directly on the page, add or remove items, and your changes will save automatically to Firestore.
+              </p>
+            </header>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {[
+                {
+                  title: "Price List Menu",
+                  route: "/menu",
+                  icon: "📋",
+                  desc: "Edit luxury press on tier prices (Plain €20, Minimal €25, Detailed €30, Character €35–€40), sizing kit voucher offers, keychains, and gift extras.",
+                  badge: "Prices & Services",
+                  color: "border-pink-200 hover:border-pink-400"
+                },
+                {
+                  title: "Gift Bundles",
+                  route: "/bundles",
+                  icon: "🎁",
+                  desc: "Edit Mini Me Matching Bundle (€55), Ultimate Luxury Bundle (€90), package perks, and Matchy-Matchy accessory add-on pricing.",
+                  badge: "Gift Packs",
+                  color: "border-pink-200 hover:border-pink-400"
+                },
+                {
+                  title: "Mystery Boxes",
+                  route: "/mystery-boxes",
+                  icon: "✨",
+                  desc: "Edit Kids' Mini Mystery Box (€25), Adult Mystery Box (€35), package items, and customer preference guidelines.",
+                  badge: "Surprise Packs",
+                  color: "border-pink-200 hover:border-pink-400"
+                },
+                {
+                  title: "VIP Club & Rewards",
+                  route: "/club",
+                  icon: "👑",
+                  desc: "Edit digital loyalty stamp rewards (free gifts every 5 orders), complimentary birthday sets, and DM join instructions.",
+                  badge: "Loyalty Club",
+                  color: "border-amber-200 hover:border-amber-400"
+                },
+                {
+                  title: "Policies & Shipping",
+                  route: "/policies",
+                  icon: "📦",
+                  desc: "Update An Post nationwide flat rates (€4.85 standard / €9 tracked), 5–10 business day turnaround times, and cancellation rules.",
+                  badge: "Shipping & Terms",
+                  color: "border-neutral-200 hover:border-neutral-400"
+                },
+                {
+                  title: "Sizing & Care Guides",
+                  route: "/guides",
+                  icon: "📏",
+                  desc: "Edit the 3 sizing methods, millimeter sizing chart (XS-XL), sticky tab hairdryer application trick, and gentle removal instructions.",
+                  badge: "Sizing Charts",
+                  color: "border-pink-200 hover:border-pink-400"
+                },
+                {
+                  title: "Contact & DMs",
+                  route: "/contact",
+                  icon: "💬",
+                  desc: "Update Instagram handle (@unhollynails), Facebook links, customer order checklist, and response hours.",
+                  badge: "Direct Orders",
+                  color: "border-neutral-200 hover:border-neutral-400"
+                },
+                {
+                  title: "About Studio",
+                  route: "/about",
+                  icon: "💖",
+                  desc: "Edit Holly's studio story, turnaround details, bespoke hand-painted values, and signoff signature.",
+                  badge: "Studio Bio",
+                  color: "border-pink-200 hover:border-pink-400"
+                },
+              ].map((card) => (
+                <div key={card.route} className={`bg-white rounded-2xl p-6 border ${card.color} shadow-sm flex flex-col justify-between transition-all hover:shadow-md group`}>
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-3xl">{card.icon}</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-pink-50 text-[#FF5C9D] border border-pink-100">
+                        {card.badge}
+                      </span>
+                    </div>
+                    <h3 className="font-bold text-lg text-neutral-900 group-hover:text-[#FF5C9D] transition-colors mb-2">
+                      {card.title}
+                    </h3>
+                    <p className="text-xs text-neutral-500 leading-relaxed mb-6">
+                      {card.desc}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => handleOpenPageInEditMode(card.route)}
+                    className="w-full py-2.5 px-4 rounded-xl bg-neutral-900 hover:bg-[#FF5C9D] text-white font-bold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                  >
+                    <span>✏️ Edit Page Now</span>
+                    <span>→</span>
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         )}

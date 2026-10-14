@@ -87,12 +87,18 @@ export default function Home() {
   const [homeContent, setHomeContent] = useState({
     heroTitle: "Luxury Hand-Painted<br/>Press-On Nails",
     heroSubtitle: "Salon-quality custom nail sets perfectly sized and delivered directly to your door.",
+    collectionsEyebrow: "Curated Sets",
     collectionsTitle: "Featured Collections",
     collectionsSubtitle: "Explore my exclusive themed sets hand-painted just for you.",
+    newArrivalsEyebrow: "Fresh From Studio",
     newArrivalsTitle: "New Arrivals",
     newArrivalsSubtitle: "Fresh out of the studio. Grab them before they're gone.",
-      featuredProductIds: [] as string[],
-    });
+    sizingEyebrow: "Guaranteed Flawless Fit",
+    sizingTitle: "New to UnHolly Nails?",
+    sizingSubtitle: "Don't guess your size! Order a sizing kit first to guarantee a flawless, salon-perfect fit for your custom sets.",
+    sizingButtonText: "Order Kit (€5)",
+    featuredProductIds: [] as string[],
+  });
 
 
 
@@ -192,8 +198,8 @@ export default function Home() {
 
         const ribbonSnap = await getDocs(query(collection(db, "users", vendorUid, "collection_settings"), where("isFeatured", "==", true)));
       const ribbons = ribbonSnap.docs.map(d => ({ 
-        tag: d.data().tag, 
-        title: d.data().title || d.data().tag,
+        tag: d.data().tag || d.id, 
+        title: d.data().title || d.id,
         description: d.data().description || "",
         backgroundImageUrl: d.data().backgroundImageUrl || "",
         ombreStart: d.data().ombreStart || "#f472b6",
@@ -369,7 +375,7 @@ export default function Home() {
   // dynamicFilters and displayedProducts removed since ribbon acts as global nav
 
   return (
-    <div className="min-h-screen font-sans bg-[#FFF5F8] text-[#1A1A1A] pb-24 selection:bg-pink-200 selection:text-pink-900 relative">
+    <div className="min-h-screen font-sans bg-[#FFF5F8] text-[#1A1A1A] pb-10 sm:pb-20 selection:bg-pink-200 selection:text-pink-900 relative">
       {/* Seamless Soft Pink Glows */}
       <div className="fixed top-[-20%] left-[-10%] w-[70%] h-[70%] bg-[#FF5C9D] rounded-full mix-blend-multiply filter blur-[200px] opacity-[0.12] pointer-events-none z-0"></div>
       <div className="fixed bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-[#FF5C9D] rounded-full mix-blend-multiply filter blur-[200px] opacity-[0.12] pointer-events-none z-0"></div>
@@ -382,18 +388,18 @@ export default function Home() {
           ) : (
             <>
               {/* Hero Section */}
-              <div className="relative w-full flex flex-col items-center justify-start pt-8 sm:pt-12 pb-16 sm:pb-24">
+              <div className="relative w-full flex flex-col items-center justify-start pt-6 sm:pt-10 pb-6 sm:pb-14">
                 <div className="relative z-10 text-center px-4 max-w-4xl mx-auto flex flex-col items-center">
                   <Image 
                     src="/logo_cropped.png" 
                     alt="UnHolly Nails" 
                     width={360} 
                     height={150} 
-                    className="w-56 sm:w-80 h-auto object-contain mb-8" 
+                    className="w-44 sm:w-72 h-auto object-contain mb-4 sm:mb-6" 
                     priority 
                   />
                   {editMode ? (
-                    <div className="w-full max-w-2xl mx-auto flex flex-col gap-4">
+                    <div className="w-full max-w-2xl mx-auto flex flex-col gap-3">
                       <input 
                         type="text" 
                         value={homeContent.heroTitle.replace(/<br\/>/g, ' ')} 
@@ -402,7 +408,7 @@ export default function Home() {
                           const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
                           await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { heroTitle: e.target.value }, { merge: true }); 
                         }} 
-                        className="relative z-50 pointer-events-auto ring-2 ring-pink-500 rounded-xl p-2 bg-pink-50/50 text-4xl sm:text-6xl font-black text-black text-center uppercase tracking-tighter leading-none w-full"
+                        className="relative z-50 pointer-events-auto ring-2 ring-pink-500 rounded-xl p-2.5 bg-pink-50/80 font-brand font-bold text-3xl sm:text-5xl text-neutral-900 text-center tracking-tight leading-tight w-full outline-none"
                       />
                       <textarea 
                         value={homeContent.heroSubtitle.replace(/<br\/>/g, '\n')} 
@@ -411,39 +417,98 @@ export default function Home() {
                           const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
                           await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { heroSubtitle: e.target.value.replace(/\n/g, '<br/>') }, { merge: true }); 
                         }} 
-                        className="relative z-50 pointer-events-auto ring-2 ring-pink-500 rounded p-2 bg-pink-50/50 text-lg sm:text-xl text-neutral-500 text-center w-full resize-none font-medium"
+                        className="relative z-50 pointer-events-auto ring-2 ring-pink-500 rounded-xl p-2.5 bg-pink-50/80 font-brand text-sm sm:text-base text-neutral-600 text-center w-full resize-none font-normal outline-none"
                         rows={2}
                       />
                     </div>
                   ) : (
                     <>
                       <h1 
-                        className="text-4xl sm:text-6xl font-black text-black mb-6 uppercase tracking-tighter leading-none"
+                        className="font-brand font-bold text-3xl sm:text-5xl lg:text-6xl text-neutral-900 mb-3 sm:mb-5 tracking-tight leading-tight"
                         dangerouslySetInnerHTML={{ __html: homeContent.heroTitle }}
                       />
                       <p 
-                        className="text-lg sm:text-xl text-neutral-500 mb-10 font-medium max-w-2xl"
+                        className="font-brand text-sm sm:text-base text-neutral-600 mb-6 sm:mb-8 font-normal max-w-xl leading-relaxed"
                         dangerouslySetInnerHTML={{ __html: homeContent.heroSubtitle }}
                       />
                     </>
                   )}
-                  <div className="flex flex-wrap gap-4 justify-center">
-                    <Link href="/collections/all" className="bg-black text-white px-10 py-4 rounded-full font-black text-xs tracking-widest uppercase hover:bg-neutral-800 hover:scale-105 transition-all shadow-xl">Shop All Designs</Link>
-                    <Link href="/collections/special-offers" className="bg-white border border-pink-200 text-black px-10 py-4 rounded-full font-black text-xs tracking-widest uppercase hover:border-black hover:scale-105 transition-all shadow-xl">View Promos</Link>
+                  <div className="flex flex-wrap gap-3 sm:gap-4 justify-center">
+                    <Link href="/collections/all" className="bg-[#FF5C9D] text-white px-7 sm:px-9 py-3 sm:py-3.5 rounded-full font-brand font-bold text-xs tracking-wider uppercase hover:bg-pink-600 hover:scale-105 transition-all shadow-md shadow-pink-500/25">Shop All Designs</Link>
+                    <Link href="/collections/special-offers" className="bg-white/90 backdrop-blur-sm border border-pink-200 text-neutral-800 px-7 sm:px-9 py-3 sm:py-3.5 rounded-full font-brand font-bold text-xs tracking-wider uppercase hover:border-[#FF5C9D] hover:text-[#FF5C9D] hover:scale-105 transition-all shadow-sm">View Promos</Link>
                   </div>
                 </div>
               </div>
 
-              {/* Sizing Kit Promo Banner */}
-              <div className="w-full px-4 sm:px-6 relative z-20 mt-4 mb-16">
-                <div className="max-w-5xl mx-auto bg-black rounded-3xl p-8 sm:p-12 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-8 transform hover:-translate-y-1 transition-transform duration-300 border border-neutral-800">
-                  <div className="text-white text-center md:text-left">
-                    <h2 className="text-3xl font-black uppercase tracking-wider mb-2">New to UnHolly Nails?</h2>
-                    <p className="text-neutral-400 font-medium max-w-lg">
-                      Don't guess your size! Order a sizing kit first to guarantee a flawless, salon-perfect fit for your custom sets.
-                    </p>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-4 shrink-0">
+              {/* Sizing Kit Promo Banner (Sleek Nail Studio Glam) */}
+              <div className="w-full px-4 sm:px-6 relative z-20 my-3 sm:my-8">
+                <div className="max-w-5xl mx-auto bg-gradient-to-br from-neutral-950 via-neutral-900 to-pink-950/60 border border-pink-500/30 rounded-2xl sm:rounded-3xl p-5 sm:p-8 shadow-xl shadow-pink-500/5 flex flex-col md:flex-row items-center justify-between gap-5 sm:gap-8 transform hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden">
+                  <div className="absolute -top-12 -right-12 w-48 h-48 bg-[#FF5C9D] rounded-full filter blur-[90px] opacity-20 pointer-events-none"></div>
+                  
+                  {editMode ? (
+                    <div className="w-full flex flex-col gap-2 relative z-10 text-white">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] uppercase font-brand font-bold text-pink-400">Eyebrow:</span>
+                        <input 
+                          type="text" 
+                          value={homeContent.sizingEyebrow || "Guaranteed Flawless Fit"} 
+                          onChange={e => setHomeContent(prev => ({...prev, sizingEyebrow: e.target.value}))} 
+                          onBlur={async (e) => { 
+                            const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
+                            await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { sizingEyebrow: e.target.value }, { merge: true }); 
+                          }} 
+                          className="relative z-50 ring-2 ring-pink-500 rounded px-2 py-1 bg-pink-950/70 font-brand font-bold text-[11px] uppercase tracking-widest text-[#FF5C9D] flex-1 outline-none"
+                        />
+                      </div>
+                      <input 
+                        type="text" 
+                        value={homeContent.sizingTitle || "New to UnHolly Nails?"} 
+                        onChange={e => setHomeContent(prev => ({...prev, sizingTitle: e.target.value}))} 
+                        onBlur={async (e) => { 
+                          const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
+                          await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { sizingTitle: e.target.value }, { merge: true }); 
+                        }} 
+                        className="relative z-50 ring-2 ring-pink-500 rounded p-1.5 bg-pink-950/70 font-brand font-bold text-xl sm:text-2xl tracking-tight text-white w-full outline-none"
+                      />
+                      <textarea 
+                        value={homeContent.sizingSubtitle || "Don't guess your size! Order a sizing kit first to guarantee a flawless, salon-perfect fit for your custom sets."} 
+                        onChange={e => setHomeContent(prev => ({...prev, sizingSubtitle: e.target.value}))} 
+                        onBlur={async (e) => { 
+                          const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
+                          await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { sizingSubtitle: e.target.value }, { merge: true }); 
+                        }} 
+                        className="relative z-50 ring-2 ring-pink-500 rounded p-1.5 bg-pink-950/70 font-brand text-neutral-300 font-normal text-xs sm:text-sm w-full resize-none outline-none"
+                        rows={2}
+                      />
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px] uppercase font-brand font-bold text-neutral-400">Button:</span>
+                        <input 
+                          type="text" 
+                          value={homeContent.sizingButtonText || "Order Kit (€5)"} 
+                          onChange={e => setHomeContent(prev => ({...prev, sizingButtonText: e.target.value}))} 
+                          onBlur={async (e) => { 
+                            const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
+                            await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { sizingButtonText: e.target.value }, { merge: true }); 
+                          }} 
+                          className="relative z-50 ring-2 ring-pink-500 rounded p-1 bg-pink-950/70 font-brand text-xs font-bold text-white w-36 text-center outline-none"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-white text-center md:text-left relative z-10">
+                      <span className="text-[#FF5C9D] font-brand font-bold text-[11px] uppercase tracking-widest block mb-1">
+                        {homeContent.sizingEyebrow || "Guaranteed Flawless Fit"}
+                      </span>
+                      <h2 className="font-brand font-bold text-xl sm:text-2xl lg:text-3xl tracking-tight mb-1.5 text-white">
+                        {homeContent.sizingTitle || "New to UnHolly Nails?"}
+                      </h2>
+                      <p className="font-brand text-neutral-300 font-normal text-xs sm:text-sm max-w-lg leading-relaxed">
+                        {homeContent.sizingSubtitle || "Don't guess your size! Order a sizing kit first to guarantee a flawless, salon-perfect fit for your custom sets."}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex flex-row gap-3 shrink-0 w-full sm:w-auto justify-center relative z-10">
                     <button 
                       onClick={() => {
                         let kit = products.find(p => p.name.toLowerCase().includes('sizing kit') || p.name.toLowerCase().includes('sizing'));
@@ -467,11 +532,11 @@ export default function Home() {
                         }
                         addToCart(kit, kit.defaultShape || 'Almond', 'N/A', kit.defaultLength || 'M', 1);
                       }} 
-                      className="bg-[#FF5C9D] text-white px-8 py-4 rounded-full font-black text-xs uppercase tracking-widest hover:bg-pink-600 transition-colors shadow-lg whitespace-nowrap"
+                      className="bg-[#FF5C9D] text-white px-6 sm:px-8 py-3 sm:py-3.5 rounded-full font-brand font-bold text-xs uppercase tracking-wider hover:bg-pink-600 transition-colors shadow-md shadow-pink-500/30 whitespace-nowrap flex-1 sm:flex-initial text-center"
                     >
-                      Order Today
+                      {homeContent.sizingButtonText || "Order Kit (€5)"}
                     </button>
-                    <Link href="/guides" className="bg-white text-black px-8 py-4 rounded-full font-black text-xs uppercase tracking-widest hover:bg-neutral-200 transition-colors shadow-lg whitespace-nowrap text-center">
+                    <Link href="/guides" className="bg-white/10 hover:bg-white/20 text-white border border-white/20 px-6 sm:px-8 py-3 sm:py-3.5 rounded-full font-brand font-bold text-xs uppercase tracking-wider transition-colors whitespace-nowrap text-center flex-1 sm:flex-initial">
                       How to measure →
                     </Link>
                   </div>
@@ -479,15 +544,28 @@ export default function Home() {
               </div>
 
               {/* Section Divider */}
-              <div className="max-w-xs mx-auto h-px bg-gradient-to-r from-transparent via-pink-300 to-transparent"></div>
+              <div className="max-w-xs mx-auto h-px bg-gradient-to-r from-transparent via-pink-300 to-transparent my-2 sm:my-4"></div>
 
               {/* Featured Collections Grid */}
-              {ribbonCollections.length > 0 && (
-                <div className="py-24 px-4 sm:px-6 w-full relative z-20">
+              {((ribbonCollections.length > 0 || allCollections.filter(c => c.tag && c.tag !== '--ribbon_layout--' && c.tag !== 'all').length > 0) || (editMode && adminUser)) && (
+                <div className="py-6 sm:py-12 px-4 sm:px-6 w-full relative z-20">
                   <div className="max-w-7xl mx-auto">
-                    <div className="text-center mb-16">
+                    <div className="text-center mb-6 sm:mb-10">
                       {editMode ? (
-                        <div className="w-full max-w-2xl mx-auto flex flex-col gap-4">
+                        <div className="w-full max-w-2xl mx-auto flex flex-col gap-2">
+                          <div className="flex items-center justify-center gap-2">
+                            <span className="text-[10px] uppercase font-brand font-bold text-pink-400">Eyebrow:</span>
+                            <input 
+                              type="text" 
+                              value={homeContent.collectionsEyebrow || "Curated Sets"} 
+                              onChange={e => setHomeContent(prev => ({...prev, collectionsEyebrow: e.target.value}))} 
+                              onBlur={async (e) => { 
+                                const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
+                                await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { collectionsEyebrow: e.target.value }, { merge: true }); 
+                              }} 
+                              className="relative z-50 pointer-events-auto ring-2 ring-pink-500 rounded px-2 py-1 bg-pink-50/80 font-brand font-bold text-xs uppercase tracking-widest text-[#FF5C9D] text-center w-64 outline-none"
+                            />
+                          </div>
                           <input 
                             type="text" 
                             value={homeContent.collectionsTitle.replace(/<br\/>/g, ' ')} 
@@ -496,7 +574,7 @@ export default function Home() {
                               const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
                               await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { collectionsTitle: e.target.value }, { merge: true }); 
                             }} 
-                            className="relative z-50 pointer-events-auto ring-2 ring-pink-500 rounded p-2 bg-pink-50/50 text-4xl sm:text-5xl font-black uppercase tracking-tighter mb-4 text-black text-center w-full bg-transparent border-none outline-none"
+                            className="relative z-50 pointer-events-auto ring-2 ring-pink-500 rounded-xl p-2 bg-pink-50/80 font-brand font-bold text-2xl sm:text-4xl tracking-tight text-neutral-900 text-center w-full outline-none"
                           />
                           <textarea 
                             value={homeContent.collectionsSubtitle.replace(/<br\/>/g, '\n')} 
@@ -505,39 +583,55 @@ export default function Home() {
                               const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
                               await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { collectionsSubtitle: e.target.value.replace(/\n/g, '<br/>') }, { merge: true }); 
                             }} 
-                            className="relative z-50 pointer-events-auto ring-2 ring-pink-500 rounded p-2 bg-pink-50/50 text-neutral-500 font-medium text-center w-full resize-none bg-transparent border-none outline-none overflow-hidden"
+                            className="relative z-50 pointer-events-auto ring-2 ring-pink-500 rounded-xl p-2 bg-pink-50/80 font-brand text-neutral-500 font-normal text-xs sm:text-sm text-center w-full resize-none outline-none"
                             rows={2}
                           />
                         </div>
                       ) : (
                         <>
+                          <span className="font-brand font-bold text-[11px] sm:text-xs text-[#FF5C9D] uppercase tracking-widest block mb-1">
+                            {homeContent.collectionsEyebrow || "Curated Sets"}
+                          </span>
                           <h2 
-                            className="text-4xl sm:text-5xl font-black uppercase tracking-tighter mb-4 text-black"
+                            className="font-brand font-bold text-2xl sm:text-4xl text-neutral-900 mb-1.5 sm:mb-2 tracking-tight"
                             dangerouslySetInnerHTML={{ __html: homeContent.collectionsTitle }}
                           />
                           <p 
-                            className="text-neutral-500 font-medium"
+                            className="font-brand text-neutral-500 font-normal text-xs sm:text-sm max-w-lg mx-auto"
                             dangerouslySetInnerHTML={{ __html: homeContent.collectionsSubtitle }}
                           />
                         </>
                       )}
                     </div>
                     
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-                      {ribbonCollections.map((collection: any, index: number) => (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-8">
+                      {(ribbonCollections.length > 0 
+                        ? ribbonCollections 
+                        : allCollections.filter(c => c.tag && c.tag !== '--ribbon_layout--' && c.tag !== 'all').slice(0, 3).map(c => ({
+                            tag: c.tag,
+                            title: c.title || c.tag,
+                            description: c.description || "View this collection",
+                            backgroundImageUrl: c.backgroundImageUrl || "",
+                            ombreStart: c.ombreStart || "#f472b6",
+                            ombreEnd: c.ombreEnd || "#000000",
+                            bgScale: c.bgScale || 100,
+                            cardImageUrl: c.cardImageUrl || "",
+                            cardBgScale: c.cardBgScale || c.bgScale || 100
+                          }))
+                      ).map((collection: any, index: number) => (
                             <div key={collection.tag} className="relative group">
                               {editMode && adminUser && (
-                                <div className="absolute top-4 left-4 z-20 flex gap-1">
-                                  <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveRibbon(index, -1); }} className="bg-black text-white p-2.5 rounded-full hover:bg-neutral-800 shadow-md transition-transform hover:scale-110 disabled:opacity-50" disabled={index === 0} title="Move Left">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+                                <div className="absolute top-3 left-3 z-20 flex gap-1">
+                                  <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveRibbon(index, -1); }} className="bg-black text-white p-2 rounded-full hover:bg-neutral-800 shadow-md transition-transform hover:scale-110 disabled:opacity-50" disabled={index === 0} title="Move Left">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
                                   </button>
-                                  <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveRibbon(index, 1); }} className="bg-black text-white p-2.5 rounded-full hover:bg-neutral-800 shadow-md transition-transform hover:scale-110 disabled:opacity-50" disabled={index === ribbonCollections.length - 1} title="Move Right">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+                                  <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveRibbon(index, 1); }} className="bg-black text-white p-2 rounded-full hover:bg-neutral-800 shadow-md transition-transform hover:scale-110 disabled:opacity-50" disabled={index === ribbonCollections.length - 1} title="Move Right">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
                                   </button>
                                 </div>
                               )}
-                            <Link href={`/collections/${collection.tag}`} className="relative h-96 rounded-[2rem] overflow-hidden shadow-lg border border-pink-100/50 block transform transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl z-0">
-                              <div className="absolute inset-0 bg-neutral-900 transition duration-700 group-hover:scale-110" style={{ background: `linear-gradient(to bottom right, ${collection.ombreStart || '#f472b6'}, ${collection.ombreEnd || '#000000'})` }}>
+                            <Link href={`/collections/${collection.tag}`} className="relative h-64 sm:h-80 lg:h-96 rounded-2xl sm:rounded-[2rem] overflow-hidden shadow-lg border border-pink-100/50 block transform transition-all duration-500 hover:-translate-y-1.5 hover:shadow-2xl z-0">
+                              <div className="absolute inset-0 bg-neutral-900 transition duration-700 group-hover:scale-105" style={{ background: `linear-gradient(to bottom right, ${collection.ombreStart || '#f472b6'}, ${collection.ombreEnd || '#000000'})` }}>
                                 {(collection.cardImageUrl || collection.backgroundImageUrl) && (
                                   <div className="absolute inset-0 flex items-center justify-center">
                                     <div style={{ transform: `scale(${((collection.cardImageUrl ? collection.cardBgScale : collection.bgScale) || 100) / 100})`, width: '100%', height: '100%', position: 'relative' }}>
@@ -547,19 +641,19 @@ export default function Home() {
                                 )}
                               </div>
                               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent"></div>
-                              <div className="absolute inset-x-0 bottom-0 p-8 flex flex-col justify-end h-full z-10">
-                                <span className="text-pink-300 font-bold text-[10px] tracking-widest uppercase mb-2 drop-shadow-md">Collection</span>
-                                <h3 className="text-4xl font-black text-white mb-2 uppercase drop-shadow-lg leading-none" style={{ color: collection.headerColor || '#ffffff' }}>{collection.title}</h3>
-                                <p className="text-neutral-300 font-medium line-clamp-2 text-sm">{collection.description || "View this collection ?"}</p>
+                              <div className="absolute inset-x-0 bottom-0 p-5 sm:p-8 flex flex-col justify-end h-full z-10">
+                                <span className="text-pink-300 font-brand font-bold text-[10px] tracking-widest uppercase mb-1 drop-shadow-md">Collection</span>
+                                <h3 className="text-2xl sm:text-3xl font-brand font-bold text-white mb-1.5 drop-shadow-lg leading-tight tracking-tight" style={{ color: collection.headerColor || '#ffffff' }}>{collection.title}</h3>
+                                <p className="text-neutral-200 font-brand font-normal line-clamp-2 text-xs sm:text-sm drop-shadow-sm">{collection.description || "View this collection →"}</p>
                               </div>
                             </Link>
                             {editMode && adminUser && (
                               <button
                                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditData({ ...collection }); setShowEditor(true); }}
-                                className="absolute top-4 right-4 z-20 bg-black/70 hover:bg-black text-white p-3 rounded-full shadow-lg transition-transform hover:scale-110"
+                                className="absolute top-3 right-3 z-20 bg-black/70 hover:bg-black text-white p-2.5 rounded-full shadow-lg transition-transform hover:scale-110"
                                 title="Edit Collection"
                               >
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
                               </button>
                             )}
                           </div>
@@ -568,12 +662,12 @@ export default function Home() {
                         {editMode && adminUser && (
                           <div 
                             onClick={() => setShowFeaturePicker(true)}
-                            className="h-96 rounded-[2rem] border-2 border-dashed border-pink-300 hover:border-pink-500 bg-pink-50/50 hover:bg-pink-100 cursor-pointer flex flex-col items-center justify-center transition-all group shadow-sm hover:shadow-md"
+                            className="h-64 sm:h-80 lg:h-96 rounded-2xl sm:rounded-[2rem] border-2 border-dashed border-pink-300 hover:border-pink-500 bg-pink-50/50 hover:bg-pink-100 cursor-pointer flex flex-col items-center justify-center transition-all group shadow-sm hover:shadow-md"
                           >
-                            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform mb-4">
-                              <span className="text-3xl text-pink-500 font-light">+</span>
+                            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-white rounded-full flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform mb-3 sm:mb-4">
+                              <span className="text-2xl sm:text-3xl text-pink-500 font-light">+</span>
                             </div>
-                            <span className="font-bold text-pink-500 uppercase tracking-widest text-sm text-center px-4">Add Featured<br/>Collection</span>
+                            <span className="font-bold text-pink-500 uppercase tracking-widest text-xs sm:text-sm text-center px-4">Add Featured<br/>Collection</span>
                           </div>
                         )}
                     </div>
@@ -586,21 +680,34 @@ export default function Home() {
 
               {/* New Arrivals */}
                 {products.length > 0 && (
-                  <div className="py-24 px-4 sm:px-6 w-full relative z-20">
+                  <div className="py-6 sm:py-12 px-4 sm:px-6 w-full relative z-20">
                     <div className="max-w-7xl mx-auto">
-                      <div className="flex flex-col sm:flex-row justify-between items-center sm:items-end mb-16 gap-6">
+                      <div className="flex flex-col sm:flex-row justify-between items-center sm:items-end mb-5 sm:mb-8 gap-4">
                         <div className="text-center sm:text-left w-full">
                           {editMode ? (
-                            <div className="w-full flex flex-col gap-4">
+                            <div className="w-full flex flex-col gap-2">
+                              <div className="flex items-center gap-2 justify-center sm:justify-start">
+                                <span className="text-[10px] uppercase font-brand font-bold text-pink-400">Eyebrow:</span>
+                                <input 
+                                  type="text" 
+                                  value={homeContent.newArrivalsEyebrow || "Fresh From Studio"} 
+                                  onChange={e => setHomeContent(prev => ({...prev, newArrivalsEyebrow: e.target.value}))} 
+                                  onBlur={async (e) => { 
+                                    const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
+                                    await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { newArrivalsEyebrow: e.target.value }, { merge: true }); 
+                                  }} 
+                                  className="relative z-50 ring-2 ring-pink-500 rounded px-2 py-1 bg-pink-50/80 font-brand font-bold text-xs uppercase tracking-widest text-[#FF5C9D] w-56 text-center sm:text-left outline-none"
+                                />
+                              </div>
                               <input 
                                 type="text" 
                                 value={homeContent.newArrivalsTitle.replace(/<br\/>/g, ' ')} 
                                 onChange={e => setHomeContent(prev => ({...prev, newArrivalsTitle: e.target.value}))} 
                                 onBlur={async (e) => { 
-                                  const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
-                                  await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { newArrivalsTitle: e.target.value }, { merge: true }); 
-                                }} 
-                                className="relative z-50 ring-2 ring-pink-500 rounded p-2 bg-pink-50/50 text-4xl sm:text-5xl font-black uppercase tracking-tighter mb-4 text-black text-center sm:text-left w-full bg-transparent border-none outline-none"
+                                    const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
+                                    await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { newArrivalsTitle: e.target.value }, { merge: true }); 
+                                  }} 
+                                className="relative z-50 ring-2 ring-pink-500 rounded-xl p-2 bg-pink-50/80 font-brand font-bold text-2xl sm:text-4xl tracking-tight text-neutral-900 text-center sm:text-left w-full outline-none"
                               />
                               <textarea 
                                 value={homeContent.newArrivalsSubtitle.replace(/<br\/>/g, '\n')} 
@@ -609,18 +716,21 @@ export default function Home() {
                                   const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
                                   await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { newArrivalsSubtitle: e.target.value.replace(/\n/g, '<br/>') }, { merge: true }); 
                                 }} 
-                                className="relative z-50 ring-2 ring-pink-500 rounded p-2 bg-pink-50/50 text-neutral-500 font-medium text-center sm:text-left w-full resize-none bg-transparent border-none outline-none overflow-hidden"
+                                className="relative z-50 ring-2 ring-pink-500 rounded-xl p-2 bg-pink-50/80 font-brand text-neutral-500 font-normal text-xs sm:text-sm text-center sm:text-left w-full resize-none outline-none"
                                 rows={2}
                               />
                             </div>
                           ) : (
                             <>
+                              <span className="font-brand font-bold text-[11px] sm:text-xs text-[#FF5C9D] uppercase tracking-widest block mb-1">
+                                {homeContent.newArrivalsEyebrow || "Fresh From Studio"}
+                              </span>
                               <h2 
-                                className="text-4xl sm:text-5xl font-black uppercase tracking-tighter mb-4 text-black"
+                                className="font-brand font-bold text-2xl sm:text-4xl text-neutral-900 mb-1 sm:mb-1.5 tracking-tight"
                                 dangerouslySetInnerHTML={{ __html: homeContent.newArrivalsTitle }}
                               />
                               <p 
-                                className="text-neutral-500 font-medium"
+                                className="font-brand text-neutral-500 font-normal text-xs sm:text-sm"
                                 dangerouslySetInnerHTML={{ __html: homeContent.newArrivalsSubtitle }}
                               />
                             </>
@@ -628,7 +738,7 @@ export default function Home() {
                         </div>
                       </div>
                       
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 sm:gap-6">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6">
                         {(() => {
                           let actualIds = (homeContent.featuredProductIds && homeContent.featuredProductIds.length > 0)
                             ? [...homeContent.featuredProductIds]
@@ -643,7 +753,7 @@ export default function Home() {
                               const product = prodId ? products.find(p => p.id === prodId) : null;
                               if (product) {
                                 return (
-                                  <div key={`slot-${i}`} className="bg-white/60 backdrop-blur-md rounded-3xl p-4 shadow-sm border border-pink-500 ring-2 ring-pink-500/20 flex flex-col relative group">
+                                  <div key={`slot-${i}`} className="bg-white/70 backdrop-blur-md rounded-2xl sm:rounded-3xl p-3 sm:p-4 shadow-sm border border-pink-500 ring-2 ring-pink-500/20 flex flex-col relative group">
                                     <div className="absolute top-2 left-2 z-30 flex gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                                       <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveArrival(i, -1); }} disabled={i === 0} className="bg-black text-white p-2 rounded-full hover:bg-neutral-800 shadow-md disabled:opacity-50" title="Move Left"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg></button>
                                       <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveArrival(i, 1); }} disabled={i === 9} className="bg-black text-white p-2 rounded-full hover:bg-neutral-800 shadow-md disabled:opacity-50" title="Move Right"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg></button>
@@ -652,23 +762,23 @@ export default function Home() {
                                       <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPickerSlotIndex(i); }} className="bg-black text-white p-2 rounded-full hover:bg-neutral-800 shadow-md" title="Swap Design"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg></button>
                                       <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setConfirmRemoveSlot(i); }} className="bg-red-500 text-white p-2 rounded-full hover:bg-red-600 shadow-md" title="Remove"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>
                                     </div>
-                                    <div className="relative aspect-square overflow-hidden rounded-2xl bg-pink-50 mb-3 cursor-pointer" onClick={() => setEditingProduct(product)}>
+                                    <div className="relative aspect-square overflow-hidden rounded-xl sm:rounded-2xl bg-pink-50 mb-2.5 sm:mb-3 cursor-pointer" onClick={() => setEditingProduct(product)}>
                                       <Image src={product.imagePath} alt={product.name} fill className="object-cover" sizes="(max-width: 640px) 50vw, 20vw" />
                                       <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity text-white font-bold text-xs uppercase tracking-widest backdrop-blur-sm">Edit Data</div>
                                     </div>
                                     <div className="flex flex-col flex-grow px-1 text-center">
-                                      <h3 className="text-sm font-black text-neutral-900 truncate mb-0.5">{product.name}</h3>
-                                      <p className="font-bold text-xs text-neutral-500">{product.priceOnAsk ? "POA" : `\u20AC${product.basePrice.toFixed(2)}`}</p>
+                                      <h3 className="text-xs sm:text-sm font-brand font-bold text-neutral-900 truncate mb-0.5">{product.name}</h3>
+                                      <p className="font-brand font-bold text-[11px] sm:text-xs text-[#FF5C9D]">{product.priceOnAsk ? "POA" : `€${product.basePrice.toFixed(2)}`}</p>
                                     </div>
                                   </div>
                                 );
                               } else {
                                 return (
-                                  <div key={`slot-${i}`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPickerSlotIndex(i); }} className="border-2 border-dashed border-pink-300 flex flex-col items-center justify-center cursor-pointer h-full min-h-[220px] rounded-3xl bg-pink-50/50 hover:bg-pink-100 transition shadow-sm hover:shadow-md group">
-                                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform mb-3">
-                                      <span className="text-2xl text-pink-500 font-light">+</span>
+                                  <div key={`slot-${i}`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPickerSlotIndex(i); }} className="border-2 border-dashed border-pink-300 flex flex-col items-center justify-center cursor-pointer h-full min-h-[180px] sm:min-h-[220px] rounded-2xl sm:rounded-3xl bg-pink-50/50 hover:bg-pink-100 transition shadow-sm hover:shadow-md group">
+                                    <div className="w-9 h-9 sm:w-10 sm:h-10 bg-white rounded-full flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform mb-2 sm:mb-3">
+                                      <span className="text-xl sm:text-2xl text-pink-500 font-light">+</span>
                                     </div>
-                                    <span className="text-pink-500 font-bold text-[10px] uppercase tracking-widest text-center px-4">Select<br/>Design</span>
+                                    <span className="text-pink-500 font-brand font-bold text-[10px] uppercase tracking-widest text-center px-2 sm:px-4">Select<br/>Design</span>
                                   </div>
                                 );
                               }
@@ -676,7 +786,7 @@ export default function Home() {
                           } else {
                             const displayProducts = actualIds.map(id => products.find(p => p.id === id)).filter(Boolean);
                             return displayProducts.map((product: any) => (
-                              <div key={product.id} id={`product-${product.id}`} className="bg-white/60 backdrop-blur-md rounded-3xl p-4 shadow-sm border border-pink-100/50 flex flex-col group relative transform transition-all duration-300 hover:-translate-y-2 hover:shadow-xl">
+                              <div key={product.id} id={`product-${product.id}`} className="bg-white/70 backdrop-blur-md rounded-2xl sm:rounded-3xl p-3 sm:p-4 shadow-sm border border-pink-100/60 flex flex-col group relative transform transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
                                 {!editMode && (
                       <button
                         type="button"
@@ -685,22 +795,22 @@ export default function Home() {
                           e.stopPropagation();
                           toggleWishlist(product);
                         }}
-                        className={`absolute top-3 right-3 z-20 w-8 h-8 rounded-full flex items-center justify-center transition-all backdrop-blur-md cursor-pointer ${
+                        className={`absolute top-2.5 right-2.5 sm:top-3 sm:right-3 z-20 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all backdrop-blur-md cursor-pointer ${
                           isWishlisted(product.id)
                             ? 'bg-pink-500 text-white shadow-md scale-105'
                             : 'bg-white/80 text-neutral-600 hover:text-pink-500 hover:bg-white shadow-sm'
                         }`}
                         title={isWishlisted(product.id) ? "Remove from wishlist" : "Save to wishlist"}
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={isWishlisted(product.id) ? "currentColor" : "none"} stroke="currentColor" strokeWidth={isWishlisted(product.id) ? 0 : 2} className="w-4 h-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={isWishlisted(product.id) ? "currentColor" : "none"} stroke="currentColor" strokeWidth={isWishlisted(product.id) ? 0 : 2} className="w-3.5 h-3.5 sm:w-4 sm:h-4">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
                         </svg>
                       </button>
                     )}
                     {product.isPromo && (
-                                  <div className="absolute top-5 left-5 bg-[#FF5C9D] text-white text-[9px] font-bold px-3 py-1.5 rounded-full z-10 shadow-sm uppercase tracking-widest">PROMO</div>
+                                  <div className="absolute top-4 left-4 bg-[#FF5C9D] text-white text-[8px] sm:text-[9px] font-brand font-bold px-2.5 py-1 rounded-full z-10 shadow-sm uppercase tracking-widest">PROMO</div>
                                 )}
-                                <div className="relative aspect-square overflow-hidden rounded-2xl bg-pink-50 cursor-pointer mb-5 group/cardimg" onClick={() => openDrawer(product)}>
+                                <div className="relative aspect-square overflow-hidden rounded-xl sm:rounded-2xl bg-pink-50 cursor-pointer mb-3 sm:mb-4 group/cardimg" onClick={() => openDrawer(product)}>
                                   <Image 
                                     src={product.imagePath} 
                                     alt={product.name} 
@@ -719,18 +829,18 @@ export default function Home() {
                                   )}
                                   {/* Mobile multi-photo indicator */}
                                   {product.additionalImages && product.additionalImages.length > 0 && (
-                                    <div className="absolute bottom-2 right-2 z-10 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 lg:hidden">
+                                    <div className="absolute bottom-2 right-2 z-10 bg-black/60 backdrop-blur-md text-white text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 lg:hidden">
                                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>
                                       <span>{product.additionalImages.length + 1}</span>
                                     </div>
                                   )}</div>
-                                <div className="flex flex-col flex-grow px-1">
-                                  <h3 className="text-base font-black text-neutral-900 truncate mb-1">{product.name}</h3>
-                                  <p className={`font-bold text-sm mb-4 ${product.priceOnAsk ? 'text-[#FF5C9D]' : 'text-neutral-500'}`}>
-                                    {product.priceOnAsk ? "Price on Ask" : `\u20AC${product.basePrice.toFixed(2)}`}
+                                <div className="flex flex-col flex-grow px-0.5">
+                                  <h3 className="text-xs sm:text-sm font-brand font-bold text-neutral-900 truncate mb-0.5 sm:mb-1">{product.name}</h3>
+                                  <p className={`font-brand font-bold text-xs sm:text-sm mb-2.5 sm:mb-4 ${product.priceOnAsk ? 'text-[#FF5C9D]' : 'text-neutral-500'}`}>
+                                    {product.priceOnAsk ? "Price on Ask" : `€${product.basePrice.toFixed(2)}`}
                                   </p>
                                   <div className="mt-auto">
-                                    <button onClick={() => openDrawer(product)} className="w-full bg-white text-black px-4 py-3 rounded-xl text-[10px] font-black transition-colors hover:bg-black hover:text-white uppercase tracking-widest border border-pink-100">Select Options</button>
+                                    <button onClick={() => openDrawer(product)} className="w-full bg-white text-neutral-900 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[9px] sm:text-[10px] font-brand font-bold transition-all hover:bg-neutral-900 hover:text-white uppercase tracking-wider border border-pink-100 shadow-sm">Select Options</button>
                                   </div>
                                 </div>
                               </div>
@@ -739,12 +849,116 @@ export default function Home() {
                         })()}
                       </div>
                       
-                      <div className="mt-16 flex justify-center z-30 relative">
-                        <Link href="/collections/all" className="bg-black text-white px-10 py-5 rounded-full font-black text-sm hover:bg-[#FF5C9D] uppercase tracking-widest transition-transform hover:scale-105 shadow-xl hover:shadow-[#FF5C9D]/20">View All Designs ?</Link>
+                      <div className="mt-6 sm:mt-12 flex justify-center z-30 relative">
+                        <Link href="/collections/all" className="bg-neutral-900 text-white px-8 sm:px-10 py-3.5 sm:py-4 rounded-full font-brand font-bold text-xs hover:bg-[#FF5C9D] uppercase tracking-wider transition-all hover:scale-105 shadow-lg shadow-neutral-900/10 hover:shadow-pink-500/20">View All Designs →</Link>
                       </div>
                     </div>
                   </div>
                 )}
+
+                {/* Section Divider */}
+                <div className="max-w-xs mx-auto h-px bg-gradient-to-r from-transparent via-pink-300 to-transparent my-4"></div>
+
+                {/* Studio Specials: Bundles, Mystery Boxes & VIP Club */}
+                <div className="py-6 sm:py-12 px-4 sm:px-6 w-full relative z-20">
+                  <div className="max-w-7xl mx-auto">
+                    <div className="text-center mb-6 sm:mb-10">
+                      <span className="font-brand font-bold text-[11px] sm:text-xs text-[#FF5C9D] uppercase tracking-widest block mb-1">
+                        Bespoke Experiences
+                      </span>
+                      <h2 className="font-brand font-bold text-2xl sm:text-4xl text-neutral-900 mb-1.5 tracking-tight">
+                        Bundles, Mystery Boxes & VIP Club
+                      </h2>
+                      <p className="font-brand text-neutral-500 font-normal text-xs sm:text-sm max-w-md mx-auto">
+                        Curated matching gift boxes, surprise bespoke artistry, and member rewards.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-6">
+                      {/* Card 1: Bundles */}
+                      <Link href="/bundles" className="group bg-white/80 backdrop-blur-md rounded-2xl sm:rounded-3xl p-6 sm:p-7 shadow-sm border border-pink-100/80 hover:border-pink-300 hover:shadow-lg transition-all duration-300 flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center justify-between mb-4">
+                            <span className="bg-pink-100 text-pink-700 text-[10px] font-brand font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                              Matching Sets
+                            </span>
+                            <span className="font-brand font-bold text-xs text-[#FF5C9D]">From €55</span>
+                          </div>
+                          <h3 className="font-brand font-bold text-xl text-neutral-900 group-hover:text-[#FF5C9D] transition-colors mb-2">
+                            UnHollyNails Bundles
+                          </h3>
+                          <p className="font-brand text-xs text-neutral-600 leading-relaxed mb-4">
+                            The Mini Me matching pack for you & your little bestie, or the Ultimate Luxury Box with custom press-ons, matching keychain, earrings & treats!
+                          </p>
+                        </div>
+                        <span className="font-brand font-bold text-xs text-[#FF5C9D] flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                          Explore Bundles →
+                        </span>
+                      </Link>
+
+                      {/* Card 2: Mystery Boxes */}
+                      <Link href="/mystery-boxes" className="group bg-white/80 backdrop-blur-md rounded-2xl sm:rounded-3xl p-6 sm:p-7 shadow-sm border border-pink-100/80 hover:border-pink-300 hover:shadow-lg transition-all duration-300 flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center justify-between mb-4">
+                            <span className="bg-pink-100 text-pink-700 text-[10px] font-brand font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                              Surprise Artistry
+                            </span>
+                            <span className="font-brand font-bold text-xs text-[#FF5C9D]">From €25</span>
+                          </div>
+                          <h3 className="font-brand font-bold text-xl text-neutral-900 group-hover:text-[#FF5C9D] transition-colors mb-2">
+                            Mystery Boxes
+                          </h3>
+                          <p className="font-brand text-xs text-neutral-600 leading-relaxed mb-4">
+                            Can&apos;t pick a design? Leave it to Holly! Available in pre-sized adult sets or safe kids&apos; mini boxes with goodies & discount scratchers.
+                          </p>
+                        </div>
+                        <span className="font-brand font-bold text-xs text-[#FF5C9D] flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                          Discover Mystery Boxes →
+                        </span>
+                      </Link>
+
+                      {/* Card 3: VIP Club */}
+                      <Link href="/club" className="group bg-gradient-to-br from-neutral-950 via-neutral-900 to-pink-950/60 rounded-2xl sm:rounded-3xl p-6 sm:p-7 shadow-lg border border-pink-500/30 text-white hover:shadow-xl transition-all duration-300 flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center justify-between mb-4">
+                            <span className="bg-[#FF5C9D] text-white text-[10px] font-brand font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                              Free Birthday Set
+                            </span>
+                            <span className="font-brand font-bold text-xs text-pink-300">VIP Perks</span>
+                          </div>
+                          <h3 className="font-brand font-bold text-xl text-white group-hover:text-pink-300 transition-colors mb-2">
+                            UnHollyNails Club!
+                          </h3>
+                          <p className="font-brand text-xs text-neutral-300 leading-relaxed mb-4">
+                            Earn digital loyalty stamps for free gifts every 5 orders, get a FREE custom birthday set delivered in time for your big day, and unlock secret deals!
+                          </p>
+                        </div>
+                        <span className="font-brand font-bold text-xs text-[#FF5C9D] flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                          Join The VIP Club →
+                        </span>
+                      </Link>
+                    </div>
+
+                    {/* Quick Studio Nav Banner */}
+                    <div className="mt-8 p-5 sm:p-6 bg-white/60 backdrop-blur-md rounded-2xl border border-pink-100 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+                      <div>
+                        <span className="font-brand font-bold text-xs text-neutral-900 block mb-0.5">Need sizing help or want to see full pricing?</span>
+                        <p className="font-brand text-[11px] text-neutral-500">Check out Holly&apos;s complete price list, sizing guides, and turnaround policies.</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2.5 justify-center">
+                        <Link href="/menu" className="bg-white border border-pink-200 text-neutral-900 px-4 py-2 rounded-full font-brand font-bold text-xs hover:border-[#FF5C9D] hover:text-[#FF5C9D] transition-colors">
+                          Price Menu
+                        </Link>
+                        <Link href="/guides" className="bg-white border border-pink-200 text-neutral-900 px-4 py-2 rounded-full font-brand font-bold text-xs hover:border-[#FF5C9D] hover:text-[#FF5C9D] transition-colors">
+                          Sizing & Care
+                        </Link>
+                        <Link href="/policies" className="bg-white border border-pink-200 text-neutral-900 px-4 py-2 rounded-full font-brand font-bold text-xs hover:border-[#FF5C9D] hover:text-[#FF5C9D] transition-colors">
+                          Store Policies
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </>
             )}
   
@@ -931,7 +1145,7 @@ export default function Home() {
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowFeaturePicker(false)} />
             <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden text-black animate-slide-up flex flex-col max-h-[80vh]">
               <div className="bg-white border-b px-6 py-4 flex items-center justify-between z-10">
-                <h2 className="font-black text-lg uppercase tracking-wider">Feature Collection</h2>
+                <h2 className="font-brand font-bold text-lg tracking-tight text-neutral-900 uppercase">Feature Collection</h2>
                 <button onClick={() => setShowFeaturePicker(false)} className="text-neutral-400 hover:text-black text-2xl font-bold leading-none">&times;</button>
               </div>
               <div className="p-4 overflow-y-auto flex-1 bg-neutral-50">
@@ -972,7 +1186,7 @@ export default function Home() {
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowEditor(false)} />
             <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden text-black animate-slide-up flex flex-col max-h-[90vh]">
               <div className="bg-white border-b px-6 py-4 flex items-center justify-between z-10 shrink-0">
-                <h2 className="font-black text-lg uppercase tracking-wider">Edit Theme</h2>
+                <h2 className="font-brand font-bold text-lg tracking-tight text-neutral-900 uppercase">Edit Theme</h2>
                 <button onClick={() => setShowEditor(false)} className="text-neutral-400 hover:text-black text-2xl font-bold leading-none">&times;</button>
               </div>
               <div className="p-6 space-y-6 overflow-y-auto flex-1">
@@ -1058,7 +1272,7 @@ export default function Home() {
 
               {/* Save Button */}
               <div className="shrink-0 bg-white border-t p-4">
-                <button onClick={saveInlineEdits} disabled={savingEdit} className="w-full bg-black text-white py-4 rounded-xl font-black text-sm uppercase tracking-widest hover:bg-neutral-800 disabled:opacity-50 transition-colors">
+                <button onClick={saveInlineEdits} disabled={savingEdit} className="w-full bg-neutral-900 text-white py-3.5 rounded-xl font-brand font-bold text-xs uppercase tracking-wider hover:bg-[#FF5C9D] disabled:opacity-50 transition-colors shadow-md">
                   {savingEdit ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
@@ -1072,7 +1286,7 @@ export default function Home() {
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setPickerSlotIndex(null)} />
             <div className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl overflow-hidden text-black animate-slide-up flex flex-col max-h-[85vh]">
               <div className="bg-white border-b px-6 py-4 flex items-center justify-between z-10 shrink-0">
-                <h2 className="font-black text-lg uppercase tracking-wider">Select Design for Slot {pickerSlotIndex + 1}</h2>
+                <h2 className="font-brand font-bold text-lg tracking-tight text-neutral-900 uppercase">Select Design for Slot {pickerSlotIndex + 1}</h2>
                 <button onClick={() => setPickerSlotIndex(null)} className="text-neutral-400 hover:text-black text-2xl font-bold leading-none">&times;</button>
               </div>
               <div className="p-6 overflow-y-auto flex-1 bg-neutral-50 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4">
@@ -1098,7 +1312,7 @@ export default function Home() {
                     </div>
                     <div className="p-3">
                       <h3 className="font-bold text-xs truncate group-hover:text-pink-600 transition-colors">{p.name}</h3>
-                      <p className="text-[10px] text-neutral-500">{p.priceOnAsk ? "POA" : `\u20AC${p.basePrice}`}</p>
+                      <p className="text-[10px] text-neutral-500">{p.priceOnAsk ? "POA" : `€${p.basePrice}`}</p>
                     </div>
                   </button>
                 ))}
@@ -1118,7 +1332,7 @@ export default function Home() {
                 <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8"><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
                 </div>
-                <h3 className="text-xl font-black mb-2">Remove Design?</h3>
+                <h3 className="text-xl font-brand font-bold text-neutral-900 mb-2">Remove Design?</h3>
                 <p className="text-neutral-500 text-sm mb-6">Are you sure you want to clear this slot from New Arrivals?</p>
                 <div className="flex gap-3">
                   <button onClick={() => setConfirmRemoveSlot(null)} className="flex-1 bg-neutral-100 text-neutral-700 py-3 rounded-xl font-bold hover:bg-neutral-200 transition-colors">Cancel</button>
