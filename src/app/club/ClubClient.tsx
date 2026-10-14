@@ -290,8 +290,8 @@ export default function ClubClient() {
                 Your account is active and collecting stamps on every order. Check your live digital Loyalty Card and order progress in your client profile.
               </p>
               <Link
-                href="/profile"
-                className="inline-flex items-center gap-2 bg-white text-[#FF5C9D] hover:bg-pink-50 font-brand font-bold text-xs uppercase tracking-wider px-6 py-3 rounded-full transition shadow-md hover:scale-105 active:scale-95"
+                href="/profile?tab=orders"
+                className="inline-flex items-center gap-2 bg-white text-[#FF5C9D] hover:bg-pink-50 font-brand font-bold text-xs uppercase tracking-wider px-6 py-3 rounded-full transition shadow-md hover:scale-105 active:scale-95 cursor-pointer"
               >
                 <span>View My Digital Loyalty Card</span>
                 <span>→</span>

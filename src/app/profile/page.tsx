@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { auth, db, storage } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { onSnapshot, deleteDoc } from 'firebase/firestore';
@@ -13,12 +14,22 @@ import { Dancing_Script } from 'next/font/google';
 
 const dancingScript = Dancing_Script({ subsets: ["latin"] });
 
-export default function ProfilePage() {
+function ProfilePageContent() {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
   const [user, setUser] = useState<any>(null);
   const [clientProfile, setClientProfile] = useState<any>(null);
   const [sizes, setSizes] = useState<any>({});
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('sizing');
+  const [activeTab, setActiveTab] = useState<'sizing' | 'orders' | 'details'>(
+    tabParam === 'orders' || tabParam === 'details' ? tabParam : 'sizing'
+  );
+
+  useEffect(() => {
+    if (tabParam === 'orders' || tabParam === 'details' || tabParam === 'sizing') {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
   const [orders, setOrders] = useState<any[]>([]);
@@ -1008,6 +1019,18 @@ export default function ProfilePage() {
         onClose={() => setLightboxOpen(false)}
         title="Client Vault Photo"
       />
-</div>
+    </div>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex-grow bg-[#FFF5F8] flex items-center justify-center pt-20 pb-20">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500"></div>
+      </div>
+    }>
+      <ProfilePageContent />
+    </Suspense>
   );
 }
