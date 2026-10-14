@@ -260,7 +260,7 @@ export default function GlobalHeader() {
     if (tag === 'menu') return { title: 'PRICE MENU', href: '/menu' };
     if (tag === 'bundles') return { title: 'BUNDLES', href: '/bundles' };
     if (tag === 'mystery-boxes') return { title: 'MYSTERY BOXES', href: '/mystery-boxes' };
-    if (tag === 'club') return { title: 'VIP CLUB', href: '/club' };
+    if (tag === 'club') return { title: 'UNHOLLY CLUB', href: '/club' };
     if (tag === 'guides') return { title: 'SIZING & CARE', href: '/guides' };
     if (tag === 'policies') return { title: 'POLICIES', href: '/policies' };
     if (['Sets', 'Minis', 'Keychains', 'Earrings', 'Accessories', 'Basics'].includes(tag)) {
@@ -498,8 +498,8 @@ export default function GlobalHeader() {
                         isActive('/club') ? 'bg-pink-50 text-[#FF5C9D]' : 'hover:bg-pink-50/70 text-neutral-800 hover:text-black'
                       }`}
                     >
-                      <span className="text-xs font-bold">VIP Club & Rewards</span>
-                      <span className="text-[10px] text-neutral-500 font-medium">Birthday treats & member perks</span>
+                      <span className="text-xs font-bold">UnHollyNails Club</span>
+                      <span className="text-[10px] text-neutral-500 font-medium">Digital loyalty card, stamps & perks</span>
                     </Link>
 
                     <div className="h-px bg-pink-100/80 my-1"></div>
@@ -750,8 +750,8 @@ export default function GlobalHeader() {
                         : 'bg-pink-50/50 hover:bg-pink-50 border-pink-100/80 text-neutral-800'
                     }`}
                   >
-                    <span className="text-xs font-bold">VIP Club</span>
-                    <span className="text-[10px] text-neutral-500 font-medium">Rewards & perks</span>
+                    <span className="text-xs font-bold">UnHolly Club</span>
+                    <span className="text-[10px] text-neutral-500 font-medium">Loyalty card & rewards</span>
                   </Link>
                 </div>
               </div>

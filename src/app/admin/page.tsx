@@ -887,12 +887,12 @@ export default function AdminDashboard() {
                   color: "border-pink-200 hover:border-pink-400"
                 },
                 {
-                  title: "VIP Club & Rewards",
+                  title: "UnHollyNails Club",
                   route: "/club",
-                  icon: "👑",
-                  desc: "Edit digital loyalty stamp rewards (free gifts every 5 orders), complimentary birthday sets, and DM join instructions.",
+                  icon: "💳",
+                  desc: "Edit digital loyalty stamp rewards (free delivery every 5 orders), complimentary birthday sets, account sign-in & DM join instructions.",
                   badge: "Loyalty Club",
-                  color: "border-amber-200 hover:border-amber-400"
+                  color: "border-pink-200 hover:border-pink-400"
                 },
                 {
                   title: "Policies & Shipping",

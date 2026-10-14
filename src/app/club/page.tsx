@@ -2,8 +2,8 @@ import { Metadata } from "next";
 import ClubClient from "./ClubClient";
 
 export const metadata: Metadata = {
-  title: "Unholly Nails Club! | VIP Loyalty & Birthday Perks",
-  description: "Join the VIP UnHollyNails Club! Earn digital loyalty stamps for free gifts and celebrate with a bespoke birthday nail set.",
+  title: "UnHollyNails Club | Digital Loyalty Card & Member Perks",
+  description: "Join the UnHollyNails Club! Create an account to get your digital loyalty card, earn stamps on every order, and celebrate with birthday treats.",
 };
 
 export default function ClubPage() {

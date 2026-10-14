@@ -859,7 +859,7 @@ export default function Home() {
                 {/* Section Divider */}
                 <div className="max-w-xs mx-auto h-px bg-gradient-to-r from-transparent via-pink-300 to-transparent my-4"></div>
 
-                {/* Studio Specials: Bundles, Mystery Boxes & VIP Club */}
+                {/* Studio Specials: Bundles, Mystery Boxes & UnHollyNails Club */}
                 <div className="py-6 sm:py-12 px-4 sm:px-6 w-full relative z-20">
                   <div className="max-w-7xl mx-auto">
                     <div className="text-center mb-6 sm:mb-10">
@@ -867,7 +867,7 @@ export default function Home() {
                         Bespoke Experiences
                       </span>
                       <h2 className="font-brand font-bold text-2xl sm:text-4xl text-neutral-900 mb-1.5 tracking-tight">
-                        Bundles, Mystery Boxes & VIP Club
+                        Bundles, Mystery Boxes & The Club
                       </h2>
                       <p className="font-brand text-neutral-500 font-normal text-xs sm:text-sm max-w-md mx-auto">
                         Curated matching gift boxes, surprise bespoke artistry, and member rewards.
@@ -917,24 +917,24 @@ export default function Home() {
                         </span>
                       </Link>
 
-                      {/* Card 3: VIP Club */}
+                      {/* Card 3: UnHollyNails Club */}
                       <Link href="/club" className="group bg-gradient-to-br from-neutral-950 via-neutral-900 to-pink-950/60 rounded-2xl sm:rounded-3xl p-6 sm:p-7 shadow-lg border border-pink-500/30 text-white hover:shadow-xl transition-all duration-300 flex flex-col justify-between">
                         <div>
                           <div className="flex items-center justify-between mb-4">
                             <span className="bg-[#FF5C9D] text-white text-[10px] font-brand font-bold px-3 py-1 rounded-full uppercase tracking-wider">
                               Free Birthday Set
                             </span>
-                            <span className="font-brand font-bold text-xs text-pink-300">VIP Perks</span>
+                            <span className="font-brand font-bold text-xs text-pink-300">Club Perks</span>
                           </div>
                           <h3 className="font-brand font-bold text-xl text-white group-hover:text-pink-300 transition-colors mb-2">
                             UnHollyNails Club!
                           </h3>
                           <p className="font-brand text-xs text-neutral-300 leading-relaxed mb-4">
-                            Earn digital loyalty stamps for free gifts every 5 orders, get a FREE custom birthday set delivered in time for your big day, and unlock secret deals!
+                            Every client with an account is a member! Earn digital stamps on your loyalty card, unlock free delivery & bespoke gifts, and celebrate with birthday treats.
                           </p>
                         </div>
                         <span className="font-brand font-bold text-xs text-[#FF5C9D] flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                          Join The VIP Club →
+                          Join The Club →
                         </span>
                       </Link>
                     </div>

@@ -30,7 +30,7 @@ export default function GlobalFooter() {
               <li><Link href="/menu" className="text-neutral-500 hover:text-[#FF5C9D] transition-colors font-medium">Price Menu & Services</Link></li>
               <li><Link href="/bundles" className="text-neutral-500 hover:text-[#FF5C9D] transition-colors font-medium">UnHollyNails Bundles</Link></li>
               <li><Link href="/mystery-boxes" className="text-neutral-500 hover:text-[#FF5C9D] transition-colors font-medium">Mystery Boxes</Link></li>
-              <li><Link href="/club" className="text-neutral-500 hover:text-[#FF5C9D] transition-colors font-medium">UnHollyNails VIP Club</Link></li>
+              <li><Link href="/club" className="text-neutral-500 hover:text-[#FF5C9D] transition-colors font-medium">UnHollyNails Club</Link></li>
             </ul>
           </div>
 
