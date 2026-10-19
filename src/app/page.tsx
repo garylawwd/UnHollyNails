@@ -14,10 +14,12 @@ import { useAdmin } from "@/context/AdminContext";
 import { Product } from "@/lib/types";
 import ProductLightbox from "@/components/ProductLightbox";
 import ShapeSizingGuideModal from "@/components/ShapeSizingGuideModal";
+import ProductDetailDrawer from "@/components/ProductDetailDrawer";
+import { VENDOR_UID, VALID_ADMINS, DEFAULT_SHAPES, DEFAULT_LENGTHS, DEFAULT_SIZES, formatStorageImageUrl } from "@/lib/constants";
 
-const SHAPE_OPTIONS = ["Almond", "Stiletto", "Coffin", "Square", "Oval", "Round", "Other"];
-const SIZE_OPTIONS = ["XS", "S", "M", "L", "Other"];
-const LENGTH_OPTIONS = ["XS", "S", "M", "L", "XL", "Other"];
+const SHAPE_OPTIONS = [...DEFAULT_SHAPES, "Other"];
+const SIZE_OPTIONS = [...DEFAULT_SIZES, "Other"];
+const LENGTH_OPTIONS = [...DEFAULT_LENGTHS, "Other"];
 
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -50,17 +52,16 @@ export default function Home() {
   const [ribbonCollections, setRibbonCollections] = useState<{tag: string, title: string}[]>([]);
 
   useEffect(() => {
-    const VALID_ADMINS = ["0TMvGP1VIja7VzVM87MPQaacoY03", "CMzpkonBxKeLboaVTUYwDWgiwNG3"];
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
-      if (user && VALID_ADMINS.includes(user.uid)) {
+      if (user && VALID_ADMINS.includes(user.uid as any)) {
         setAdminUser(user);
       } else {
         setAdminUser(null);
       }
       if (user && user.email) {
         try {
-          const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+          const vendorUid = VENDOR_UID;
           const q = query(collection(db, "users", vendorUid, "clients"), where("email", "==", user.email));
           const snap = await getDocs(q);
           if (!snap.empty) {
@@ -87,6 +88,14 @@ export default function Home() {
   const [homeContent, setHomeContent] = useState({
     heroTitle: "Luxury Hand-Painted<br/>Press-On Nails",
     heroSubtitle: "Salon-quality custom nail sets perfectly sized and delivered directly to your door.",
+    feature1Title: "Bespoke Artistry",
+    feature1Sub: "100% Hand-Painted in Studio",
+    feature2Title: "Salon-Grade Gel",
+    feature2Sub: "Reusable Luxury Soft Gel Tips",
+    feature3Title: "Custom Millimeter Fit",
+    feature3Sub: "Tailored to Your Exact Nail Beds",
+    feature4Title: "Complete Prep Kit",
+    feature4Sub: "Includes File, Buffer, Tabs & Glue",
     collectionsEyebrow: "Curated Sets",
     collectionsTitle: "Featured Collections",
     collectionsSubtitle: "Explore my exclusive themed sets hand-painted just for you.",
@@ -113,9 +122,7 @@ export default function Home() {
     newItems[index + direction] = temp;
     
     setRibbonCollections(newItems);
-    // Note: To persist this order, we'd need a featured_order document in Firestore.
-    // For now, it sorts locally. To save order globally, we should update a document.
-    const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+    const vendorUid = VENDOR_UID;
     await setDoc(doc(db, 'users', vendorUid, 'store_settings', 'featured_order'), {
       order: newItems.map(c => c.tag)
     }, { merge: true });
@@ -124,7 +131,7 @@ export default function Home() {
   const moveArrival = async (index: number, direction: number) => {
     if (direction === -1 && index === 0) return;
     if (direction === 1 && index === 9) return;
-    const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+    const vendorUid = VENDOR_UID;
     let newIds = (homeContent.featuredProductIds && homeContent.featuredProductIds.length > 0)
           ? [...homeContent.featuredProductIds]
           : products.slice(0, 10).map(pr => pr.id);
@@ -142,7 +149,7 @@ export default function Home() {
     if (!adminUser || !editData) return;
     setSavingEdit(true);
     try {
-      const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+      const vendorUid = VENDOR_UID;
       let newImageUrl = editData.backgroundImageUrl;
       let newCardImageUrl = editData.cardImageUrl;
 
@@ -179,7 +186,7 @@ export default function Home() {
 
   const fetchProducts = async () => {
     try {
-      const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+      const vendorUid = VENDOR_UID;
       
       try {
         const homeRef = doc(db, "users", vendorUid, "store_settings", "home_content");
@@ -228,38 +235,28 @@ export default function Home() {
 
       const snapshot = await getDocs(q);
 
-      // Fetch the Android app's separate multi-photo collection
-      const imagesSnapshot = await getDocs(collectionGroup(db, "set_images"));
+      // Fetch the Android app's separate multi-photo collection for this vendor
+      const imagesSnapshot = await getDocs(collection(db, "users", vendorUid, "set_images"));
       const allSetImages = imagesSnapshot.docs.map(doc => doc.data());
 
       const fetchedProducts = snapshot.docs.map(d => {
         const data = d.data();
         const syncId = data.syncId || d.id;
-        
-        // Helper to reconstruct Firebase Storage URLs from local Android paths
-        const formatImageUrl = (url: string) => {
-          if (url && !url.startsWith('http')) {
-            const filename = url.split('/').pop();
-            const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
-            return filename ? `https://firebasestorage.googleapis.com/v0/b/presson-pro.firebasestorage.app/o/users%2F${vendorUid}%2Fimages%2F${filename}?alt=media` : url;
-          }
-          return url;
-        };
 
         // Extract extra photos uploaded via Android app
         const androidExtraImages = allSetImages
           .filter(img => img.setSyncId === syncId && img.uri)
           .sort((a, b) => (a.position || 0) - (b.position || 0))
-          .map(img => formatImageUrl(img.uri as string));
+          .map(img => formatStorageImageUrl(img.uri as string, vendorUid));
 
         // Merge web-uploaded images (additionalImages array) with Android-uploaded images
-        const mergedExtraImages = Array.from(new Set([...(data.additionalImages || []).map(formatImageUrl), ...androidExtraImages]));
+        const mergedExtraImages = Array.from(new Set([...(data.additionalImages || []).map((u: string) => formatStorageImageUrl(u, vendorUid)), ...androidExtraImages]));
 
         let primaryImage = data.imagePath;
         if ((!primaryImage || !primaryImage.startsWith('http')) && mergedExtraImages.length > 0) {
           primaryImage = mergedExtraImages.find(img => img.startsWith("http")) || mergedExtraImages[0];
         } else {
-          primaryImage = formatImageUrl(primaryImage);
+          primaryImage = formatStorageImageUrl(primaryImage, vendorUid);
         }
 
         // Ensure the primary image isn't duplicated in the gallery carousel
@@ -276,6 +273,8 @@ export default function Home() {
           description: data.description || '',
           defaultShape: data.defaultShape || 'Almond',
           defaultLength: data.defaultLength || 'M',
+          hiddenShapes: Array.isArray(data.hiddenShapes) ? data.hiddenShapes : [],
+          hiddenLengths: Array.isArray(data.hiddenLengths) ? data.hiddenLengths : [],
           isPromo: data.isPromo === true,
           category: data.category || 'Uncategorized',
           tags: data.tags || [],
@@ -384,11 +383,58 @@ export default function Home() {
       <div className="relative z-10 flex flex-col min-h-screen">
         <main className="w-full flex-grow flex flex-col">
           {loading ? (
-            <div className="flex justify-center items-center h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-400"></div></div>
+            <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-20 space-y-12 animate-pulse">
+              {/* Hero Skeleton */}
+              <div className="flex flex-col items-center text-center max-w-3xl mx-auto space-y-4">
+                <div className="w-48 sm:w-64 h-24 rounded-2xl bg-pink-200/40" />
+                <div className="w-3/4 h-10 sm:h-14 rounded-2xl bg-pink-200/50" />
+                <div className="w-2/3 h-5 rounded-xl bg-pink-200/30" />
+                <div className="flex gap-3 pt-2">
+                  <div className="w-40 h-11 rounded-full bg-pink-300/50" />
+                  <div className="w-36 h-11 rounded-full bg-pink-200/40" />
+                </div>
+              </div>
+              {/* Editorial Studio Features Skeleton */}
+              <div className="max-w-5xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                {[1, 2, 3, 4].map(n => (
+                  <div key={n} className="h-24 rounded-2xl bg-white/70 border border-pink-100 p-4 flex flex-col justify-center space-y-2">
+                    <div className="w-8 h-8 rounded-xl bg-pink-100" />
+                    <div className="w-3/4 h-3.5 rounded bg-pink-100/80" />
+                    <div className="w-1/2 h-2.5 rounded bg-pink-100/50" />
+                  </div>
+                ))}
+              </div>
+              {/* Sizing Banner Skeleton */}
+              <div className="max-w-5xl mx-auto h-36 rounded-3xl bg-neutral-900/80 p-6 flex items-center justify-between">
+                <div className="space-y-2.5 w-1/2">
+                  <div className="w-32 h-3 rounded bg-pink-400/40" />
+                  <div className="w-64 h-6 rounded bg-white/20" />
+                  <div className="w-80 h-3.5 rounded bg-white/10" />
+                </div>
+                <div className="w-36 h-11 rounded-full bg-pink-500/40 hidden sm:block" />
+              </div>
+              {/* Featured Collections Skeleton */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[1, 2, 3].map(n => (
+                  <div key={n} className="h-72 sm:h-80 rounded-[2rem] bg-pink-200/40 border border-pink-100" />
+                ))}
+              </div>
+              {/* New Arrivals Skeleton */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                {[1, 2, 3, 4, 5].map(n => (
+                  <div key={n} className="bg-white/70 rounded-3xl p-3.5 border border-pink-100 space-y-3">
+                    <div className="aspect-square rounded-2xl bg-pink-100/70" />
+                    <div className="h-3.5 w-3/4 rounded bg-pink-100/80" />
+                    <div className="h-3 w-1/3 rounded bg-pink-100/60" />
+                    <div className="h-8 w-full rounded-xl bg-pink-100/50" />
+                  </div>
+                ))}
+              </div>
+            </div>
           ) : (
             <>
               {/* Hero Section */}
-              <div className="relative w-full flex flex-col items-center justify-start pt-6 sm:pt-10 pb-6 sm:pb-14">
+              <div className="relative w-full flex flex-col items-center justify-start pt-6 sm:pt-10 pb-4 sm:pb-10">
                 <div className="relative z-10 text-center px-4 max-w-4xl mx-auto flex flex-col items-center">
                   <Image 
                     src="/logo_cropped.png" 
@@ -405,7 +451,7 @@ export default function Home() {
                         value={homeContent.heroTitle.replace(/<br\/>/g, ' ')} 
                         onChange={e => setHomeContent(prev => ({...prev, heroTitle: e.target.value}))} 
                         onBlur={async (e) => { 
-                          const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
+                          const vendorUid = VENDOR_UID; 
                           await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { heroTitle: e.target.value }, { merge: true }); 
                         }} 
                         className="relative z-50 pointer-events-auto ring-2 ring-pink-500 rounded-xl p-2.5 bg-pink-50/80 font-brand font-bold text-3xl sm:text-5xl text-neutral-900 text-center tracking-tight leading-tight w-full outline-none"
@@ -414,7 +460,7 @@ export default function Home() {
                         value={homeContent.heroSubtitle.replace(/<br\/>/g, '\n')} 
                         onChange={e => setHomeContent(prev => ({...prev, heroSubtitle: e.target.value}))} 
                         onBlur={async (e) => { 
-                          const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
+                          const vendorUid = VENDOR_UID; 
                           await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { heroSubtitle: e.target.value.replace(/\n/g, '<br/>') }, { merge: true }); 
                         }} 
                         className="relative z-50 pointer-events-auto ring-2 ring-pink-500 rounded-xl p-2.5 bg-pink-50/80 font-brand text-sm sm:text-base text-neutral-600 text-center w-full resize-none font-normal outline-none"
@@ -440,6 +486,111 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Modern Editorial Studio Features Showcase */}
+              <div className="w-full px-4 sm:px-6 relative z-20 mb-2 sm:mb-4">
+                <div className="max-w-5xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                  {[
+                    {
+                      titleKey: "feature1Title",
+                      subKey: "feature1Sub",
+                      defaultTitle: "Bespoke Artistry",
+                      defaultSub: "100% Hand-Painted in Studio",
+                      icon: (
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 sm:w-5 sm:h-5 text-[#FF5C9D]">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
+                        </svg>
+                      )
+                    },
+                    {
+                      titleKey: "feature2Title",
+                      subKey: "feature2Sub",
+                      defaultTitle: "Salon-Grade Gel",
+                      defaultSub: "Reusable Luxury Soft Gel Tips",
+                      icon: (
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 sm:w-5 sm:h-5 text-[#FF5C9D]">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+                        </svg>
+                      )
+                    },
+                    {
+                      titleKey: "feature3Title",
+                      subKey: "feature3Sub",
+                      defaultTitle: "Custom Millimeter Fit",
+                      defaultSub: "Tailored to Your Exact Nail Beds",
+                      icon: (
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 sm:w-5 sm:h-5 text-[#FF5C9D]">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+                        </svg>
+                      )
+                    },
+                    {
+                      titleKey: "feature4Title",
+                      subKey: "feature4Sub",
+                      defaultTitle: "Complete Prep Kit",
+                      defaultSub: "Includes File, Buffer, Tabs & Glue",
+                      icon: (
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 sm:w-5 sm:h-5 text-[#FF5C9D]">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M21 11.25v8.25a1.5 1.5 0 01-1.5 1.5H5.25a1.5 1.5 0 01-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 109.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1114.625 7.5H12m0 0V21m-8.625-9.75h18c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125h-18c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                        </svg>
+                      )
+                    }
+                  ].map((feat, idx) => {
+                    const tVal = (homeContent as any)[feat.titleKey] || feat.defaultTitle;
+                    const sVal = (homeContent as any)[feat.subKey] || feat.defaultSub;
+                    return (
+                      <div
+                        key={idx}
+                        className="group relative bg-white/80 backdrop-blur-xl border border-pink-100/90 hover:border-pink-300/80 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden"
+                      >
+                        <div className="absolute -right-6 -top-6 w-20 h-20 bg-pink-200/30 rounded-full blur-xl pointer-events-none group-hover:bg-pink-300/40 transition-colors" />
+                        <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-pink-50 border border-pink-100 flex items-center justify-center mb-2.5 sm:mb-3 group-hover:scale-105 transition-transform">
+                          {feat.icon}
+                        </div>
+                        {editMode ? (
+                          <div className="space-y-1.5 relative z-10">
+                            <input
+                              type="text"
+                              value={tVal}
+                              onChange={e => setHomeContent(prev => ({ ...prev, [feat.titleKey]: e.target.value }))}
+                              onBlur={async e => {
+                                await setDoc(
+                                  doc(db, "users", VENDOR_UID, "store_settings", "home_content"),
+                                  { [feat.titleKey]: e.target.value },
+                                  { merge: true }
+                                );
+                              }}
+                              className="w-full text-xs font-brand font-bold text-neutral-900 bg-pink-50/90 ring-1 ring-pink-400 rounded px-2 py-1 outline-none"
+                            />
+                            <input
+                              type="text"
+                              value={sVal}
+                              onChange={e => setHomeContent(prev => ({ ...prev, [feat.subKey]: e.target.value }))}
+                              onBlur={async e => {
+                                await setDoc(
+                                  doc(db, "users", VENDOR_UID, "store_settings", "home_content"),
+                                  { [feat.subKey]: e.target.value },
+                                  { merge: true }
+                                );
+                              }}
+                              className="w-full text-[11px] font-brand text-neutral-600 bg-pink-50/90 ring-1 ring-pink-400 rounded px-2 py-1 outline-none"
+                            />
+                          </div>
+                        ) : (
+                          <div className="relative z-10">
+                            <h3 className="font-brand font-bold text-xs sm:text-sm text-neutral-900 tracking-tight mb-0.5">
+                              {tVal}
+                            </h3>
+                            <p className="font-brand text-[11px] sm:text-xs text-neutral-500 leading-snug">
+                              {sVal}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Sizing Kit Promo Banner (Sleek Nail Studio Glam) */}
               <div className="w-full px-4 sm:px-6 relative z-20 my-3 sm:my-8">
                 <div className="max-w-5xl mx-auto bg-gradient-to-br from-neutral-950 via-neutral-900 to-pink-950/60 border border-pink-500/30 rounded-2xl sm:rounded-3xl p-5 sm:p-8 shadow-xl shadow-pink-500/5 flex flex-col md:flex-row items-center justify-between gap-5 sm:gap-8 transform hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden">
@@ -454,7 +605,7 @@ export default function Home() {
                           value={homeContent.sizingEyebrow || "Guaranteed Flawless Fit"} 
                           onChange={e => setHomeContent(prev => ({...prev, sizingEyebrow: e.target.value}))} 
                           onBlur={async (e) => { 
-                            const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
+                            const vendorUid = VENDOR_UID; 
                             await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { sizingEyebrow: e.target.value }, { merge: true }); 
                           }} 
                           className="relative z-50 ring-2 ring-pink-500 rounded px-2 py-1 bg-pink-950/70 font-brand font-bold text-[11px] uppercase tracking-widest text-[#FF5C9D] flex-1 outline-none"
@@ -465,7 +616,7 @@ export default function Home() {
                         value={homeContent.sizingTitle || "New to UnHolly Nails?"} 
                         onChange={e => setHomeContent(prev => ({...prev, sizingTitle: e.target.value}))} 
                         onBlur={async (e) => { 
-                          const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
+                          const vendorUid = VENDOR_UID; 
                           await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { sizingTitle: e.target.value }, { merge: true }); 
                         }} 
                         className="relative z-50 ring-2 ring-pink-500 rounded p-1.5 bg-pink-950/70 font-brand font-bold text-xl sm:text-2xl tracking-tight text-white w-full outline-none"
@@ -474,7 +625,7 @@ export default function Home() {
                         value={homeContent.sizingSubtitle || "Don't guess your size! Order a sizing kit first to guarantee a flawless, salon-perfect fit for your custom sets."} 
                         onChange={e => setHomeContent(prev => ({...prev, sizingSubtitle: e.target.value}))} 
                         onBlur={async (e) => { 
-                          const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
+                          const vendorUid = VENDOR_UID; 
                           await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { sizingSubtitle: e.target.value }, { merge: true }); 
                         }} 
                         className="relative z-50 ring-2 ring-pink-500 rounded p-1.5 bg-pink-950/70 font-brand text-neutral-300 font-normal text-xs sm:text-sm w-full resize-none outline-none"
@@ -487,7 +638,7 @@ export default function Home() {
                           value={homeContent.sizingButtonText || "Order Kit (€5)"} 
                           onChange={e => setHomeContent(prev => ({...prev, sizingButtonText: e.target.value}))} 
                           onBlur={async (e) => { 
-                            const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
+                            const vendorUid = VENDOR_UID; 
                             await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { sizingButtonText: e.target.value }, { merge: true }); 
                           }} 
                           className="relative z-50 ring-2 ring-pink-500 rounded p-1 bg-pink-950/70 font-brand text-xs font-bold text-white w-36 text-center outline-none"
@@ -560,7 +711,7 @@ export default function Home() {
                               value={homeContent.collectionsEyebrow || "Curated Sets"} 
                               onChange={e => setHomeContent(prev => ({...prev, collectionsEyebrow: e.target.value}))} 
                               onBlur={async (e) => { 
-                                const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
+                                const vendorUid = VENDOR_UID; 
                                 await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { collectionsEyebrow: e.target.value }, { merge: true }); 
                               }} 
                               className="relative z-50 pointer-events-auto ring-2 ring-pink-500 rounded px-2 py-1 bg-pink-50/80 font-brand font-bold text-xs uppercase tracking-widest text-[#FF5C9D] text-center w-64 outline-none"
@@ -571,7 +722,7 @@ export default function Home() {
                             value={homeContent.collectionsTitle.replace(/<br\/>/g, ' ')} 
                             onChange={e => setHomeContent(prev => ({...prev, collectionsTitle: e.target.value}))} 
                             onBlur={async (e) => { 
-                              const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
+                              const vendorUid = VENDOR_UID; 
                               await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { collectionsTitle: e.target.value }, { merge: true }); 
                             }} 
                             className="relative z-50 pointer-events-auto ring-2 ring-pink-500 rounded-xl p-2 bg-pink-50/80 font-brand font-bold text-2xl sm:text-4xl tracking-tight text-neutral-900 text-center w-full outline-none"
@@ -580,7 +731,7 @@ export default function Home() {
                             value={homeContent.collectionsSubtitle.replace(/<br\/>/g, '\n')} 
                             onChange={e => setHomeContent(prev => ({...prev, collectionsSubtitle: e.target.value}))} 
                             onBlur={async (e) => { 
-                              const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
+                              const vendorUid = VENDOR_UID; 
                               await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { collectionsSubtitle: e.target.value.replace(/\n/g, '<br/>') }, { merge: true }); 
                             }} 
                             className="relative z-50 pointer-events-auto ring-2 ring-pink-500 rounded-xl p-2 bg-pink-50/80 font-brand text-neutral-500 font-normal text-xs sm:text-sm text-center w-full resize-none outline-none"
@@ -693,7 +844,7 @@ export default function Home() {
                                   value={homeContent.newArrivalsEyebrow || "Fresh From Studio"} 
                                   onChange={e => setHomeContent(prev => ({...prev, newArrivalsEyebrow: e.target.value}))} 
                                   onBlur={async (e) => { 
-                                    const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
+                                    const vendorUid = VENDOR_UID; 
                                     await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { newArrivalsEyebrow: e.target.value }, { merge: true }); 
                                   }} 
                                   className="relative z-50 ring-2 ring-pink-500 rounded px-2 py-1 bg-pink-50/80 font-brand font-bold text-xs uppercase tracking-widest text-[#FF5C9D] w-56 text-center sm:text-left outline-none"
@@ -704,7 +855,7 @@ export default function Home() {
                                 value={homeContent.newArrivalsTitle.replace(/<br\/>/g, ' ')} 
                                 onChange={e => setHomeContent(prev => ({...prev, newArrivalsTitle: e.target.value}))} 
                                 onBlur={async (e) => { 
-                                    const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
+                                    const vendorUid = VENDOR_UID; 
                                     await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { newArrivalsTitle: e.target.value }, { merge: true }); 
                                   }} 
                                 className="relative z-50 ring-2 ring-pink-500 rounded-xl p-2 bg-pink-50/80 font-brand font-bold text-2xl sm:text-4xl tracking-tight text-neutral-900 text-center sm:text-left w-full outline-none"
@@ -713,7 +864,7 @@ export default function Home() {
                                 value={homeContent.newArrivalsSubtitle.replace(/<br\/>/g, '\n')} 
                                 onChange={e => setHomeContent(prev => ({...prev, newArrivalsSubtitle: e.target.value}))} 
                                 onBlur={async (e) => { 
-                                  const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3"; 
+                                  const vendorUid = VENDOR_UID; 
                                   await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { newArrivalsSubtitle: e.target.value.replace(/\n/g, '<br/>') }, { merge: true }); 
                                 }} 
                                 className="relative z-50 ring-2 ring-pink-500 rounded-xl p-2 bg-pink-50/80 font-brand text-neutral-500 font-normal text-xs sm:text-sm text-center sm:text-left w-full resize-none outline-none"
@@ -973,169 +1124,14 @@ export default function Home() {
       </div>{/* end z-10 wrapper */}
 
       {selectedProduct && !editMode && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center text-black">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={closeDrawer} aria-hidden="true" />
-          <div className="relative w-full sm:w-[480px] bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] transform transition-transform animate-slide-up">
-            <button onClick={closeDrawer} className="absolute top-4 right-4 z-10 bg-white/90 backdrop-blur p-2 rounded-full text-black hover:bg-neutral-100 transition shadow-sm" aria-label="Close drawer">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-            <div className="overflow-y-auto w-full hide-scrollbar">
-              <div className="relative group">
-                <div ref={scrollContainerRef} className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar">
-                  <div className="relative aspect-[4/3] w-full shrink-0 snap-center bg-pink-50 cursor-zoom-in group/zoom" onClick={() => openLightbox(0)}>
-                    <Image src={selectedProduct.imagePath} alt={selectedProduct.name} fill className="object-cover" sizes="(max-width: 640px) 100vw, 480px" />
-                    <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5 opacity-90 group-hover/zoom:opacity-100 transition shadow pointer-events-none">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" /></svg>
-                      <span className="font-semibold text-[11px]">Tap to view full</span>
-                    </div>
-                  </div>
-                  {selectedProduct.additionalImages?.map((url: string, idx: number) => (
-                    <div key={idx} className="relative aspect-[4/3] w-full shrink-0 snap-center bg-pink-50 border-l border-white cursor-zoom-in group/zoom" onClick={() => openLightbox(idx + 1)}>
-                      <Image src={url} alt={`${selectedProduct.name} ${idx}`} fill className="object-cover" sizes="(max-width: 640px) 100vw, 480px" />
-                      <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5 opacity-90 group-hover/zoom:opacity-100 transition shadow pointer-events-none">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" /></svg>
-                        <span className="font-semibold text-[11px]">Tap to view full</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                
-                {(selectedProduct.additionalImages?.length || 0) > 0 && (
-                  <>
-                    <button onClick={() => scrollGallery('left')} className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white p-2 rounded-full shadow-md text-black opacity-0 group-hover:opacity-100 transition-opacity hidden sm:block">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
-                    </button>
-                    <button onClick={() => scrollGallery('right')} className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white p-2 rounded-full shadow-md text-black opacity-0 group-hover:opacity-100 transition-opacity hidden sm:block">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
-                    </button>
-                  </>
-                )}
-              </div>
-              
-              {(selectedProduct.additionalImages?.length || 0) > 0 && (
-                <div className="flex justify-center gap-1.5 mt-3 mb-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-black/60"></div>
-                  {selectedProduct.additionalImages?.map((_, idx) => (
-                    <div key={idx} className="w-1.5 h-1.5 rounded-full bg-black/20"></div>
-                  ))}
-                </div>
-              )}
-
-              <div className="p-5 sm:p-6 pb-6">
-                <div className="flex flex-wrap gap-1 mb-2">
-                  {selectedProduct.tags?.map(t => <span key={t} className="bg-pink-50 text-pink-700 text-[10px] px-2 py-0.5 rounded-md border border-pink-200">{t}</span>)}
-                </div>
-                <div className="flex items-center justify-between mb-1 gap-2">
-                  <h2 className="text-2xl font-bold text-[#1A1A1A]">{selectedProduct.name}</h2>
-                  <button
-                    type="button"
-                    onClick={() => toggleWishlist(selectedProduct)}
-                    className={`px-3 py-1.5 rounded-full border transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold ${
-                      isWishlisted(selectedProduct.id)
-                        ? 'border-pink-300 bg-pink-50 text-pink-600 shadow-sm'
-                        : 'border-neutral-200 text-neutral-600 hover:text-black hover:border-black'
-                    }`}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={isWishlisted(selectedProduct.id) ? "currentColor" : "none"} stroke="currentColor" strokeWidth={isWishlisted(selectedProduct.id) ? 0 : 2} className="w-3.5 h-3.5 text-pink-500">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
-                    </svg>
-                    <span>{isWishlisted(selectedProduct.id) ? 'Saved' : 'Save'}</span>
-                  </button>
-                </div>
-                
-                <p className={`text-lg font-medium mb-4 ${selectedProduct.priceOnAsk ? 'text-pink-600 font-bold' : 'text-neutral-600'}`}>
-                  {selectedProduct.priceOnAsk ? "Price on Ask" : `\u20AC${selectedProduct.basePrice.toFixed(2)}`}
-                </p>
-                {selectedProduct.description && (
-                  <p className="text-neutral-500 text-sm leading-relaxed mb-5 whitespace-pre-wrap">
-                    {selectedProduct.description}
-                  </p>
-                )}
-                
-                {!(selectedProduct.name.toLowerCase().includes('mini') || selectedProduct.name.toLowerCase().includes('kids') || selectedProduct.type?.toLowerCase() === 'minis' || (selectedProduct.tags || []).some(t => t.toLowerCase() === 'minis')) && (
-                  <div className="mb-4">
-                    <div className="flex justify-between items-end mb-2">
-                      <h3 className="text-sm font-bold text-neutral-900 uppercase tracking-wider">Shape</h3>
-                      <button type="button" onClick={() => setShowShapeGuide(true)} className="text-xs text-pink-600 font-bold hover:underline flex items-center gap-1 cursor-pointer">
-                        ✨ Shape & Sizing Guide
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {SHAPE_OPTIONS.map(shape => (
-                        <label key={shape} className={`cursor-pointer text-center px-3 py-2.5 rounded-xl text-sm font-semibold border transition-all ${selectedShape === shape ? 'bg-black text-white border-black' : 'bg-white text-neutral-700 border-neutral-200 hover:border-black'}`}>
-                          <input type="radio" className="hidden" name="shape" value={shape} checked={selectedShape === shape} onChange={(e) => setSelectedShape(e.target.value)} />
-                          {shape}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {!selectedProduct.name.toLowerCase().includes('sizing') && (
-                  <div className="mb-4">
-                    <div className="flex justify-between items-end mb-2">
-                      <h3 className="text-sm font-bold text-neutral-900 uppercase tracking-wider">Size</h3>
-                      {(selectedProduct.name.toLowerCase().includes('mini') || selectedProduct.name.toLowerCase().includes('kids') || selectedProduct.type?.toLowerCase() === 'minis' || (selectedProduct.tags || []).some((t: string) => t.toLowerCase() === 'minis')) && (
-                        <button type="button" onClick={() => setShowShapeGuide(true)} className="text-xs text-pink-600 font-bold hover:underline flex items-center gap-1 cursor-pointer">
-                          ✨ Sizing Guide
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 mb-1">
-                      {currentUser && (
-                        <label className={`cursor-pointer w-full py-2.5 flex items-center justify-center rounded-xl text-sm font-semibold border transition-all ${selectedSize === 'Profile Sizes' ? 'bg-black text-white border-black' : 'bg-pink-50 text-pink-700 border-pink-200 hover:border-pink-300'}`}>
-                          <input type="radio" className="hidden" name="size" value="Profile Sizes" checked={selectedSize === 'Profile Sizes'} onChange={(e) => setSelectedSize(e.target.value)} />
-                          ✨ Use My Saved Sizes ✨
-                        </label>
-                      )}
-                      {SIZE_OPTIONS.map(size => (
-                        <label key={size} className={`cursor-pointer flex-1 min-w-[3rem] py-2.5 flex items-center justify-center rounded-xl text-sm font-semibold border transition-all ${selectedSize === size ? 'bg-black text-white border-black' : 'bg-white text-neutral-700 border-neutral-200 hover:border-black'}`}>
-                          <input type="radio" className="hidden" name="size" value={size} checked={selectedSize === size} onChange={(e) => setSelectedSize(e.target.value)} />
-                          {size}
-                        </label>
-                      ))}
-                    </div>
-                    {!currentUser && (
-                      <p className="text-[10px] text-neutral-500 text-center italic mt-1">
-                        💡 Tip: Setting up a profile lets you save your exact custom sizes for faster checkouts!
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {!(selectedProduct.name.toLowerCase().includes('mini') || selectedProduct.name.toLowerCase().includes('kids') || selectedProduct.type?.toLowerCase() === 'minis' || (selectedProduct.tags || []).some(t => t.toLowerCase() === 'minis')) && (
-                  <div className="mb-4">
-                    <div className="flex justify-between items-end mb-2">
-                      <h3 className="text-sm font-bold text-neutral-900 uppercase tracking-wider">Length</h3>
-                    </div>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {LENGTH_OPTIONS.map(length => (
-                        <label key={length} className={`cursor-pointer text-center px-3 py-2.5 rounded-xl text-sm font-semibold border transition-all ${selectedLength === length ? 'bg-black text-white border-black' : 'bg-white text-neutral-700 border-neutral-200 hover:border-black'}`}>
-                          <input type="radio" className="hidden" name="length" value={length} checked={selectedLength === length} onChange={(e) => setSelectedLength(e.target.value)} />
-                          {length}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-              </div>
-            </div>
-            <div className="p-4 bg-white border-t border-neutral-100 flex-shrink-0 flex items-center gap-4">
-              <div className="flex items-center border border-neutral-200 rounded-xl px-2 h-[56px]">
-                <button onClick={() => setSelectedQuantity(Math.max(1, selectedQuantity - 1))} className="p-2 text-neutral-500 hover:text-black w-8 h-full flex items-center justify-center font-bold text-lg">-</button>
-                <span className="px-2 font-bold text-sm min-w-[2rem] text-center">{selectedQuantity}</span>
-                <button onClick={() => setSelectedQuantity(selectedQuantity + 1)} className="p-2 text-neutral-500 hover:text-black w-8 h-full flex items-center justify-center font-bold text-lg">+</button>
-              </div>
-              <button 
-                onClick={handleAddToBag} 
-                className="flex-grow bg-black text-white font-bold text-base py-4 rounded-xl hover:bg-neutral-800 transition-colors shadow-lg shadow-black/10 active:scale-[0.98] h-[56px]"
-              >
-                {selectedProduct.priceOnAsk ? "Add to Request — POA" : `Add to Bag — €${(selectedProduct.basePrice * selectedQuantity).toFixed(2)}`}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ProductDetailDrawer
+          product={selectedProduct}
+          onClose={closeDrawer}
+          currentUser={currentUser}
+          clientProfile={clientProfile}
+          onOpenLightbox={openLightbox}
+          onOpenShapeGuide={() => setShowShapeGuide(true)}
+        />
       )}
     
 
@@ -1157,7 +1153,7 @@ export default function Home() {
                       <button
                         key={c.tag}
                         onClick={async () => {
-                          const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+                          const vendorUid = VENDOR_UID;
                           await setDoc(doc(db, 'users', vendorUid, 'collection_settings', c.tag), { isFeatured: true }, { merge: true });
                           const updated = { ...c, isFeatured: true };
                           setRibbonCollections((prev: any) => [...prev, updated]);
@@ -1257,7 +1253,7 @@ export default function Home() {
                 <div className="pt-4 border-t border-neutral-100">
                   <button
                     onClick={async () => {
-                      const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+                      const vendorUid = VENDOR_UID;
                       await setDoc(doc(db, 'users', vendorUid, 'collection_settings', editData.tag), { isFeatured: false }, { merge: true });
                       setRibbonCollections((prev: any) => prev.filter((c: any) => c.tag !== editData.tag));
                       setAllCollections((prev: any) => prev.map((c: any) => c.tag === editData.tag ? { ...c, isFeatured: false } : c));
@@ -1294,7 +1290,7 @@ export default function Home() {
                   <button
                     key={p.id}
                     onClick={async () => {
-                      const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+                      const vendorUid = VENDOR_UID;
                       let newIds = (homeContent.featuredProductIds && homeContent.featuredProductIds.length > 0)
                             ? [...homeContent.featuredProductIds]
                             : products.slice(0, 10).map(pr => pr.id);
@@ -1337,7 +1333,7 @@ export default function Home() {
                 <div className="flex gap-3">
                   <button onClick={() => setConfirmRemoveSlot(null)} className="flex-1 bg-neutral-100 text-neutral-700 py-3 rounded-xl font-bold hover:bg-neutral-200 transition-colors">Cancel</button>
                   <button onClick={async () => {
-                    const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+                    const vendorUid = VENDOR_UID;
                     let newIds = (homeContent.featuredProductIds && homeContent.featuredProductIds.length > 0)
                           ? [...homeContent.featuredProductIds]
                           : products.slice(0, 10).map(pr => pr.id);

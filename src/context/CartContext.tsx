@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { Product } from "@/lib/types";
+import { HandSizesMap } from "@/components/InteractiveHandSizer";
 
 export interface CartItem {
   cartItemId: string; // Unique ID for this specific cart entry
@@ -10,11 +11,19 @@ export interface CartItem {
   size: string;
   length: string;
   quantity: number;
+  customSizes?: HandSizesMap;
 }
 
 interface CartContextType {
   items: CartItem[];
-  addToCart: (product: Product, shape: string, size: string, length: string, quantity: number) => void;
+  addToCart: (
+    product: Product,
+    shape: string,
+    size: string,
+    length: string,
+    quantity: number,
+    customSizes?: HandSizesMap
+  ) => void;
   removeFromCart: (cartItemId: string) => void;
   updateQuantity: (cartItemId: string, quantity: number) => void;
   clearCart: () => void;
@@ -51,11 +60,24 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, [items, isMounted]);
 
-  const addToCart = (product: Product, shape: string, size: string, length: string, quantity: number) => {
+  const addToCart = (
+    product: Product,
+    shape: string,
+    size: string,
+    length: string,
+    quantity: number,
+    customSizes?: HandSizesMap
+  ) => {
     setItems((prev) => {
+      const serializedCustom = customSizes ? JSON.stringify(customSizes) : "";
       // Check if exact item exists
       const existingIndex = prev.findIndex(
-        (i) => i.product.id === product.id && i.shape === shape && i.size === size && i.length === length
+        (i) =>
+          i.product.id === product.id &&
+          i.shape === shape &&
+          i.size === size &&
+          i.length === length &&
+          (i.customSizes ? JSON.stringify(i.customSizes) : "") === serializedCustom
       );
       
       if (existingIndex >= 0) {
@@ -73,6 +95,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           size,
           length,
           quantity,
+          ...(customSizes ? { customSizes } : {}),
         },
       ];
     });

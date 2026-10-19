@@ -16,14 +16,16 @@ import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { useAdmin } from "@/context/AdminContext";
 import { Product } from "@/lib/types";
+import { VENDOR_UID, VALID_ADMINS, DEFAULT_SHAPES, DEFAULT_LENGTHS, DEFAULT_SIZES, formatStorageImageUrl } from "@/lib/constants";
 
-const SHAPE_OPTIONS = ["Almond", "Stiletto", "Coffin", "Square", "Oval", "Round", "Other"];
-const SIZE_OPTIONS = ["XS", "S", "M", "L", "Other"];
-const LENGTH_OPTIONS = ["XS", "S", "M", "L", "XL", "Other"];
+const SHAPE_OPTIONS = [...DEFAULT_SHAPES, "Other"];
+const SIZE_OPTIONS = [...DEFAULT_SIZES, "Other"];
+const LENGTH_OPTIONS = [...DEFAULT_LENGTHS, "Other"];
 
 import ItemPickerModal from "@/components/ItemPickerModal";
 import ProductLightbox from "@/components/ProductLightbox";
 import ShapeSizingGuideModal from "@/components/ShapeSizingGuideModal";
+import ProductDetailDrawer from "@/components/ProductDetailDrawer";
 
 function CollectionPageContent() {
   const params = useParams();
@@ -35,8 +37,9 @@ function CollectionPageContent() {
   const [products, setProducts] = useState<Product[]>([]);
   const [collectionInfo, setCollectionInfo] = useState<{ title: string; description: string; backgroundImageUrl: string; headerColor?: string; descriptionColor?: string; ombreStart?: string; ombreEnd?: string; bgScale?: number; inRibbon?: boolean; tag?: string; includedProductIds?: string[]; itemOrder?: string[] } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
-  const [sortOption, setSortOption] = useState<string>('newest'); // 'newest', 'oldest', 'az', 'za'
+  const [sortOption, setSortOption] = useState<string>('newest'); // 'newest', 'oldest', 'az', 'za', 'price-asc', 'price-desc'
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showItemPicker, setShowItemPicker] = useState(false);
   const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
@@ -204,7 +207,7 @@ function CollectionPageContent() {
 
   const fetchCollectionData = async () => {
     try {
-      const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+      const vendorUid = VENDOR_UID;
       
       let currentSettings: any = null;
 
@@ -245,35 +248,26 @@ function CollectionPageContent() {
       const q = query(baseQuery, where("isForSale", "==", true));
       const snapshot = await getDocs(q);
 
-      // Fetch the Android app's separate multi-photo collection
-      const imagesSnapshot = await getDocs(collectionGroup(db, "set_images"));
+      // Fetch the Android app's separate multi-photo collection for this vendor
+      const imagesSnapshot = await getDocs(collection(db, "users", vendorUid, "set_images"));
       const allSetImages = imagesSnapshot.docs.map(doc => doc.data());
 
       let fetchedProducts = snapshot.docs.map(d => {
         const data = d.data();
         const syncId = data.syncId || d.id;
-        
-        // Helper to reconstruct Firebase Storage URLs from local Android paths just in case
-        const formatImageUrl = (url: string) => {
-          if (url && !url.startsWith('http')) {
-            const filename = url.split('/').pop();
-            return filename ? `https://firebasestorage.googleapis.com/v0/b/presson-pro.firebasestorage.app/o/users%2F${vendorUid}%2Fimages%2F${filename}?alt=media` : url;
-          }
-          return url;
-        };
 
         const androidExtraImages = allSetImages
           .filter(img => img.setSyncId === syncId && img.uri)
           .sort((a, b) => (a.position || 0) - (b.position || 0))
-          .map(img => formatImageUrl(img.uri as string));
+          .map(img => formatStorageImageUrl(img.uri as string, vendorUid));
 
-        const mergedExtraImages = Array.from(new Set([...(data.additionalImages || []).map(formatImageUrl), ...androidExtraImages]));
+        const mergedExtraImages = Array.from(new Set([...(data.additionalImages || []).map((u: string) => formatStorageImageUrl(u, vendorUid)), ...androidExtraImages]));
 
         let primaryImage = data.imagePath;
         if ((!primaryImage || !primaryImage.startsWith('http')) && mergedExtraImages.length > 0) {
           primaryImage = mergedExtraImages.find(img => img.startsWith("http")) || mergedExtraImages[0];
         } else {
-          primaryImage = formatImageUrl(primaryImage);
+          primaryImage = formatStorageImageUrl(primaryImage, vendorUid);
         }
 
         const finalExtraImages = mergedExtraImages.filter(img => img !== primaryImage);
@@ -289,6 +283,8 @@ function CollectionPageContent() {
           description: data.description || '',
           defaultShape: data.defaultShape || 'Almond',
           defaultLength: data.defaultLength || 'M',
+          hiddenShapes: Array.isArray(data.hiddenShapes) ? data.hiddenShapes : [],
+          hiddenLengths: Array.isArray(data.hiddenLengths) ? data.hiddenLengths : [],
           isPromo: data.isPromo === true,
           category: data.category || 'Standard',
           tags: data.tags || [],
@@ -391,17 +387,16 @@ function CollectionPageContent() {
 
   // Admin auth detection + current user tracking
   useEffect(() => {
-    const VALID_ADMINS = ["0TMvGP1VIja7VzVM87MPQaacoY03", "CMzpkonBxKeLboaVTUYwDWgiwNG3"];
     const unsub = onAuthStateChanged(auth, async (u) => {
       setCurrentUser(u);
-      if (u && VALID_ADMINS.includes(u.uid)) {
+      if (u && VALID_ADMINS.includes(u.uid as any)) {
         setAdminUser(u);
       } else {
         setAdminUser(null);
       }
       if (u && u.email) {
         try {
-          const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+          const vendorUid = VENDOR_UID;
           const q = query(collection(db, "users", vendorUid, "clients"), where("email", "==", u.email));
           const snap = await getDocs(q);
           if (!snap.empty) {
@@ -422,7 +417,7 @@ function CollectionPageContent() {
     if (!adminUser || !editData) return;
     setSavingEdit(true);
     try {
-      const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+      const vendorUid = VENDOR_UID;
       let newImageUrl = editData.backgroundImageUrl;
 
       if (bgFileRef.current?.files && bgFileRef.current.files.length > 0) {
@@ -487,7 +482,7 @@ function CollectionPageContent() {
                   onChange={e => setCollectionInfo((prev: any) => ({...prev, title: e.target.value}))}
                   onBlur={async (e) => {
                     if(!adminUser) return;
-                    const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+                    const vendorUid = VENDOR_UID;
                     await setDoc(doc(db, "users", vendorUid, "collection_settings", tag), { title: e.target.value }, { merge: true });
                   }}
                   className={`relative z-50 pointer-events-auto ${dancingScript.className} text-6xl sm:text-8xl drop-shadow-2xl bg-transparent border-none outline-none text-center hover:ring-2 ring-pink-500 rounded p-2`} 
@@ -506,7 +501,7 @@ function CollectionPageContent() {
                   <input type="color" value={collectionInfo?.headerColor || '#ffffff'} onChange={async (e) => {
                     setCollectionInfo((prev: any) => ({...prev, headerColor: e.target.value}));
                     if(!adminUser) return;
-                    const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+                    const vendorUid = VENDOR_UID;
                     await setDoc(doc(db, "users", vendorUid, "collection_settings", tag), { headerColor: e.target.value }, { merge: true });
                   }} className="w-8 h-8 rounded cursor-pointer border-0 p-0" title="Title Color" />
                 </div>
@@ -521,7 +516,7 @@ function CollectionPageContent() {
                     onChange={e => setCollectionInfo((prev: any) => ({...prev, description: e.target.value}))}
                     onBlur={async (e) => {
                       if(!adminUser) return;
-                      const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+                      const vendorUid = VENDOR_UID;
                       await setDoc(doc(db, "users", vendorUid, "collection_settings", tag), { description: e.target.value }, { merge: true });
                     }}
                     className="relative z-50 pointer-events-auto text-lg sm:text-xl font-medium drop-shadow-md w-full max-w-2xl bg-transparent border-none outline-none text-center hover:ring-2 ring-pink-500 rounded p-2 resize-none overflow-hidden"
@@ -540,7 +535,7 @@ function CollectionPageContent() {
                     <input type="color" value={collectionInfo?.descriptionColor || '#e5e5e5'} onChange={async (e) => {
                       setCollectionInfo((prev: any) => ({...prev, descriptionColor: e.target.value}));
                       if(!adminUser) return;
-                      const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+                      const vendorUid = VENDOR_UID;
                       await setDoc(doc(db, "users", vendorUid, "collection_settings", tag), { descriptionColor: e.target.value }, { merge: true });
                     }} className="w-8 h-8 rounded cursor-pointer border-0 p-0" title="Description Color" />
                   </div>
@@ -551,12 +546,40 @@ function CollectionPageContent() {
         </div>
 
         <main className="max-w-7xl mx-auto px-3 sm:px-6 mb-20 w-full flex-grow">
-          {/* Top Control Bar (Filter/Sort) */}
-          {/* Top Control Bar (Filter/Sort) */}
-          <div className="flex justify-end items-center mb-6">
+          {/* Top Control Bar (Inline Search + Filter/Sort) */}
+          <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 mb-6">
+            <div className="relative flex-1 max-w-md">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2}
+                stroke="currentColor"
+                className="w-4 h-4 text-white/70 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search in this collection (name, description, tags)..."
+                className="w-full bg-white/15 hover:bg-white/20 focus:bg-white/25 border border-white/25 text-white placeholder:text-white/60 pl-10 pr-9 py-2 rounded-full text-xs sm:text-sm font-bold outline-none backdrop-blur-md transition"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/70 hover:text-white text-xs font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
             <button 
               onClick={() => setShowFilterModal(true)}
-              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/20 text-white px-4 py-2 rounded-full text-sm font-bold transition backdrop-blur-md"
+              className="flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 border border-white/20 text-white px-4 py-2 rounded-full text-sm font-bold transition backdrop-blur-md shrink-0 cursor-pointer"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" /></svg>
               Filter & Sort
@@ -582,6 +605,8 @@ function CollectionPageContent() {
                   >
                     <option value="newest">Newest to Oldest</option>
                     <option value="oldest">Oldest to Newest</option>
+                    <option value="price-asc">Price: Low to High</option>
+                    <option value="price-desc">Price: High to Low</option>
                     <option value="az">A to Z (Ascending)</option>
                     <option value="za">Z to A (Descending)</option>
                   </select>
@@ -604,7 +629,7 @@ function CollectionPageContent() {
 
                 <div className="flex gap-3 pt-4 border-t border-neutral-100">
                   <button 
-                    onClick={() => { setActiveFilters([]); setSortOption('newest'); }}
+                    onClick={() => { setActiveFilters([]); setSortOption('newest'); setSearchQuery(''); }}
                     className="px-6 py-3 rounded-xl font-bold text-neutral-500 hover:bg-neutral-100 transition flex-1"
                   >
                     Clear All
@@ -621,7 +646,16 @@ function CollectionPageContent() {
           )}
 
           {loading ? (
-            <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div></div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6 animate-pulse">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+                <div key={n} className="bg-white/20 backdrop-blur-md rounded-2xl p-3 border border-white/15 flex flex-col space-y-3">
+                  <div className="aspect-square rounded-xl bg-white/25" />
+                  <div className="h-4 w-3/4 rounded bg-white/30" />
+                  <div className="h-3.5 w-1/3 rounded bg-white/20" />
+                  <div className="h-9 w-full rounded-full bg-white/25 mt-auto" />
+                </div>
+              ))}
+            </div>
           ) : products.length === 0 && !editMode ? (
             <div className="text-center py-20 px-4 bg-black/40 backdrop-blur-sm rounded-3xl border border-white/10">
               <h3 className="text-xl font-bold text-white mb-2">No designs found</h3>
@@ -644,9 +678,25 @@ function CollectionPageContent() {
                 </div>
               )}
               {(() => {
-                let displayed = products.filter(p => activeFilters.length === 0 || activeFilters.some(f => p.tags?.includes(f)));
+                const q = searchQuery.trim().toLowerCase();
+                const searchTerms = q ? q.split(/\s+/).filter(Boolean) : [];
+                let displayed = products.filter(p => {
+                  const matchesTagFilter = activeFilters.length === 0 || activeFilters.some(f => p.tags?.includes(f));
+                  if (!matchesTagFilter) return false;
+                  if (searchTerms.length === 0) return true;
+                  const haystack = [
+                    p.name || "",
+                    p.description || "",
+                    p.type || "",
+                    p.category || "",
+                    ...(p.tags || [])
+                  ].join(" ").toLowerCase();
+                  return searchTerms.every(term => haystack.includes(term));
+                });
                 if (sortOption === 'az') displayed.sort((a, b) => a.name.localeCompare(b.name));
                 else if (sortOption === 'za') displayed.sort((a, b) => b.name.localeCompare(a.name));
+                else if (sortOption === 'price-asc') displayed.sort((a, b) => (a.basePrice || 0) - (b.basePrice || 0));
+                else if (sortOption === 'price-desc') displayed.sort((a, b) => (b.basePrice || 0) - (a.basePrice || 0));
                 else if (sortOption === 'oldest') displayed.sort((a, b) => (a.updatedAt && b.updatedAt) ? a.updatedAt - b.updatedAt : a.id.localeCompare(b.id)); 
                 else {
                   // For 'newest', if we have a custom item order, we maintain the array's current order (which we sorted in fetchProducts).
@@ -693,7 +743,7 @@ function CollectionPageContent() {
                       setDraggedItemIndex(null);
                       if (editMode && sortOption === 'newest' && activeFilters.length === 0) {
                         const newOrder = products.map(p => p.id);
-                        const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+                        const vendorUid = VENDOR_UID;
                         
                         // Save to the appropriate array (includedProductIds for custom collections, itemOrder for core tags)
                         const isCoreTag = ['sets', 'minis', 'keychains', 'earrings', 'accessories', 'basics', 'special-offers'].includes(tag.toLowerCase()) || tag === 'all';
@@ -819,168 +869,14 @@ function CollectionPageContent() {
 
       {/* Drawer */}
       {selectedProduct && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={closeDrawer} aria-hidden="true" />
-          <div className="relative w-full sm:w-[480px] bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] transform transition-transform animate-slide-up">
-            <button onClick={closeDrawer} className="absolute top-4 right-4 z-10 bg-white/90 backdrop-blur p-2 rounded-full text-black hover:bg-neutral-100 transition shadow-sm" aria-label="Close drawer">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-            <div className="overflow-y-auto w-full hide-scrollbar">
-              <div className="relative group">
-                <div ref={scrollContainerRef} className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar">
-                  <div className="relative aspect-[4/3] w-full shrink-0 snap-center bg-pink-50 cursor-zoom-in group/zoom" onClick={() => openLightbox(0)}>
-                    <Image src={selectedProduct.imagePath} alt={selectedProduct.name} fill className="object-cover" sizes="(max-width: 640px) 100vw, 480px" />
-                    <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5 opacity-90 group-hover/zoom:opacity-100 transition shadow pointer-events-none">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" /></svg>
-                      <span className="font-semibold text-[11px]">Tap to view full</span>
-                    </div>
-                  </div>
-                  {selectedProduct.additionalImages?.map((url, idx) => (
-                    <div key={idx} className="relative aspect-[4/3] w-full shrink-0 snap-center bg-pink-50 border-l border-white cursor-zoom-in group/zoom" onClick={() => openLightbox(idx + 1)}>
-                      <Image src={url} alt={`${selectedProduct.name} ${idx}`} fill className="object-cover" sizes="(max-width: 640px) 100vw, 480px" />
-                      <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5 opacity-90 group-hover/zoom:opacity-100 transition shadow pointer-events-none">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" /></svg>
-                        <span className="font-semibold text-[11px]">Tap to view full</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                
-                {(selectedProduct.additionalImages?.length || 0) > 0 && (
-                  <>
-                    <button onClick={() => scrollGallery('left')} className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white p-2 rounded-full shadow-md text-black opacity-0 group-hover:opacity-100 transition-opacity hidden sm:block">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
-                    </button>
-                    <button onClick={() => scrollGallery('right')} className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white p-2 rounded-full shadow-md text-black opacity-0 group-hover:opacity-100 transition-opacity hidden sm:block">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
-                    </button>
-                  </>
-                )}
-              </div>
-              
-              {(selectedProduct.additionalImages?.length || 0) > 0 && (
-                <div className="flex justify-center gap-1.5 mt-3 mb-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-black/60"></div>
-                  {selectedProduct.additionalImages?.map((_, idx) => (
-                    <div key={idx} className="w-1.5 h-1.5 rounded-full bg-black/20"></div>
-                  ))}
-                </div>
-              )}
-
-              <div className="p-5 sm:p-6 pb-6">
-                <div className="flex flex-wrap gap-1 mb-2">
-                  {selectedProduct.tags?.map(t => <span key={t} className="bg-pink-50 text-pink-700 text-[10px] px-2 py-0.5 rounded-md border border-pink-200">{t}</span>)}
-                </div>
-                <div className="flex items-center justify-between mb-1 gap-2">
-                  <h2 className="text-2xl font-bold text-[#1A1A1A]">{selectedProduct.name}</h2>
-                  <button
-                    type="button"
-                    onClick={() => toggleWishlist(selectedProduct)}
-                    className={`px-3 py-1.5 rounded-full border transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold ${
-                      isWishlisted(selectedProduct.id)
-                        ? 'border-pink-300 bg-pink-50 text-pink-600 shadow-sm'
-                        : 'border-neutral-200 text-neutral-600 hover:text-black hover:border-black'
-                    }`}
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={isWishlisted(selectedProduct.id) ? "currentColor" : "none"} stroke="currentColor" strokeWidth={isWishlisted(selectedProduct.id) ? 0 : 2} className="w-3.5 h-3.5 text-pink-500">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
-                    </svg>
-                    <span>{isWishlisted(selectedProduct.id) ? 'Saved' : 'Save'}</span>
-                  </button>
-                </div>
-                
-                <p className={`text-lg font-medium mb-4 ${selectedProduct.priceOnAsk ? 'text-pink-600 font-bold' : 'text-neutral-600'}`}>
-                  {selectedProduct.priceOnAsk ? "Price on Ask" : `€${selectedProduct.basePrice.toFixed(2)}`}
-                </p>
-                {selectedProduct.description && (
-                  <p className="text-neutral-500 text-sm leading-relaxed mb-5 whitespace-pre-wrap">
-                    {selectedProduct.description}
-                  </p>
-                )}
-                
-                {!(selectedProduct.name.toLowerCase().includes('mini') || selectedProduct.name.toLowerCase().includes('kids') || selectedProduct.type?.toLowerCase() === 'minis' || (selectedProduct.tags || []).some(t => t.toLowerCase() === 'minis')) && (
-                  <div className="mb-4">
-                    <div className="flex justify-between items-end mb-2">
-                      <h3 className="text-sm font-bold text-neutral-900 uppercase tracking-wider">Shape</h3>
-                      <button type="button" onClick={() => setShowShapeGuide(true)} className="text-xs text-pink-600 font-bold hover:underline flex items-center gap-1 cursor-pointer">
-                        ✨ Shape & Sizing Guide
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {SHAPE_OPTIONS.map(shape => (
-                        <label key={shape} className={`cursor-pointer text-center px-3 py-2.5 rounded-xl text-sm font-semibold border transition-all ${selectedShape === shape ? 'bg-black text-white border-black' : 'bg-white text-neutral-700 border-neutral-200 hover:border-black'}`}>
-                          <input type="radio" className="hidden" name="shape" value={shape} checked={selectedShape === shape} onChange={(e) => setSelectedShape(e.target.value)} />
-                          {shape}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {!selectedProduct.name.toLowerCase().includes('sizing') && (
-                  <div className="mb-4">
-                    <div className="flex justify-between items-end mb-2">
-                      <h3 className="text-sm font-bold text-neutral-900 uppercase tracking-wider">Size</h3>
-                      {(selectedProduct.name.toLowerCase().includes('mini') || selectedProduct.name.toLowerCase().includes('kids') || selectedProduct.type?.toLowerCase() === 'minis' || (selectedProduct.tags || []).some((t: string) => t.toLowerCase() === 'minis')) && (
-                        <button type="button" onClick={() => setShowShapeGuide(true)} className="text-xs text-pink-600 font-bold hover:underline flex items-center gap-1 cursor-pointer">
-                          ✨ Sizing Guide
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 mb-1">
-                      {currentUser && (
-                        <label className={`cursor-pointer w-full py-2.5 flex items-center justify-center rounded-xl text-sm font-semibold border transition-all ${selectedSize === 'Profile Sizes' ? 'bg-black text-white border-black' : 'bg-pink-50 text-pink-700 border-pink-200 hover:border-pink-300'}`}>
-                          <input type="radio" className="hidden" name="size" value="Profile Sizes" checked={selectedSize === 'Profile Sizes'} onChange={(e) => setSelectedSize(e.target.value)} />
-                          ✨ Use My Saved Sizes ✨
-                        </label>
-                      )}
-                      {SIZE_OPTIONS.map(size => (
-                        <label key={size} className={`cursor-pointer flex-1 min-w-[3rem] py-2.5 flex items-center justify-center rounded-xl text-sm font-semibold border transition-all ${selectedSize === size ? 'bg-black text-white border-black' : 'bg-white text-neutral-700 border-neutral-200 hover:border-black'}`}>
-                          <input type="radio" className="hidden" name="size" value={size} checked={selectedSize === size} onChange={(e) => setSelectedSize(e.target.value)} />
-                          {size}
-                        </label>
-                      ))}
-                    </div>
-                    {!currentUser && (
-                      <p className="text-[10px] text-neutral-500 text-center italic mt-1">
-                        💡 Tip: Setting up a profile lets you save your exact custom sizes for faster checkouts!
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {!(selectedProduct.name.toLowerCase().includes('mini') || selectedProduct.name.toLowerCase().includes('kids') || selectedProduct.type?.toLowerCase() === 'minis' || (selectedProduct.tags || []).some(t => t.toLowerCase() === 'minis')) && (
-                  <div className="mb-4">
-                    <div className="flex justify-between items-end mb-2">
-                      <h3 className="text-sm font-bold text-neutral-900 uppercase tracking-wider">Length</h3>
-                    </div>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {LENGTH_OPTIONS.map(length => (
-                        <label key={length} className={`cursor-pointer text-center px-3 py-2.5 rounded-xl text-sm font-semibold border transition-all ${selectedLength === length ? 'bg-black text-white border-black' : 'bg-white text-neutral-700 border-neutral-200 hover:border-black'}`}>
-                          <input type="radio" className="hidden" name="length" value={length} checked={selectedLength === length} onChange={(e) => setSelectedLength(e.target.value)} />
-                          {length}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="p-4 bg-white border-t border-neutral-100 flex-shrink-0 flex items-center gap-4">
-              <div className="flex items-center border border-neutral-200 rounded-xl px-2 h-[56px]">
-                <button onClick={() => setSelectedQuantity(Math.max(1, selectedQuantity - 1))} className="p-2 text-neutral-500 hover:text-black w-8 h-full flex items-center justify-center font-bold text-lg">-</button>
-                <span className="px-2 font-bold text-sm min-w-[2rem] text-center">{selectedQuantity}</span>
-                <button onClick={() => setSelectedQuantity(selectedQuantity + 1)} className="p-2 text-neutral-500 hover:text-black w-8 h-full flex items-center justify-center font-bold text-lg">+</button>
-              </div>
-              <button 
-                onClick={handleAddToBag} 
-                className="flex-grow bg-black text-white font-bold text-base py-4 rounded-xl hover:bg-neutral-800 transition-colors shadow-lg shadow-black/10 active:scale-[0.98] h-[56px]"
-              >
-                {selectedProduct.priceOnAsk ? "Add to Request — POA" : `Add to Bag — €${(selectedProduct.basePrice * selectedQuantity).toFixed(2)}`}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ProductDetailDrawer
+          product={selectedProduct}
+          onClose={closeDrawer}
+          currentUser={currentUser}
+          clientProfile={clientProfile}
+          onOpenLightbox={openLightbox}
+          onOpenShapeGuide={() => setShowShapeGuide(true)}
+        />
       )}
 
       {/* Admin Inline Theming Modal */}
@@ -1063,7 +959,7 @@ function CollectionPageContent() {
                 <button onClick={() => setItemToRemove(null)} className="flex-1 py-3 text-sm font-bold text-neutral-500 hover:bg-neutral-100 rounded-xl transition-colors">Cancel</button>
                 <button 
                   onClick={async () => {
-                    const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+                    const vendorUid = VENDOR_UID;
                     const lowerTag = tag.toLowerCase();
                     
                     try {
@@ -1106,7 +1002,7 @@ function CollectionPageContent() {
           }
           currentItems={products}
           onSave={async (selectedIds) => {
-            const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+            const vendorUid = VENDOR_UID;
             const mode = tag.toLowerCase() === 'special-offers' ? 'promo' :
               ['sets', 'minis', 'keychains', 'earrings', 'accessories', 'basics', 'all'].includes(tag.toLowerCase()) ? 'core' : 'custom';
             

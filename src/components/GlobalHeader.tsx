@@ -1,13 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
 import { useAdmin } from "@/context/AdminContext";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { onAuthStateChanged, User, signOut, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
-import { collection, getDocs, doc, getDoc, setDoc } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, setDoc, query, where, onSnapshot, deleteDoc } from "firebase/firestore";
+import { VENDOR_UID, VALID_ADMINS, formatStorageImageUrl } from "@/lib/constants";
+import { Product } from "@/lib/types";
+import ProductDetailDrawer from "@/components/ProductDetailDrawer";
+import ProductLightbox from "@/components/ProductLightbox";
+import ShapeSizingGuideModal from "@/components/ShapeSizingGuideModal";
 
 const CORE_TAGS = [
   'home', 
@@ -41,6 +47,7 @@ export default function GlobalHeader() {
     resetHandler 
   } = useAdmin();
   const [user, setUser] = useState<User | null>(null);
+  const [clientProfile, setClientProfile] = useState<any>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [studioDropdownOpen, setStudioDropdownOpen] = useState(false);
   
@@ -54,15 +61,176 @@ export default function GlobalHeader() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newCollectionTitle, setNewCollectionTitle] = useState("");
 
+  // Instant Search Modal & Drawer states
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchableProducts, setSearchableProducts] = useState<Product[]>([]);
+  const [loadingSearchProducts, setLoadingSearchProducts] = useState(false);
+  const [hasLoadedSearchProducts, setHasLoadedSearchProducts] = useState(false);
+  const [selectedSearchProduct, setSelectedSearchProduct] = useState<Product | null>(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [showShapeGuide, setShowShapeGuide] = useState(false);
+
+  // Admin Notifications state
+  const [adminNotifications, setAdminNotifications] = useState<any[]>([]);
+  const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
+      if (u && u.email) {
+        try {
+          const q = query(collection(db, "users", VENDOR_UID, "clients"), where("email", "==", u.email));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            setClientProfile({ id: snap.docs[0].id, ...snap.docs[0].data() });
+          } else {
+            setClientProfile(null);
+          }
+        } catch (e) {
+          console.error("Failed to fetch client profile in header", e);
+        }
+      } else {
+        setClientProfile(null);
+      }
     });
     return () => unsub();
   }, []);
 
+  // Real-time Admin Notifications listener for both Gary and Holly
   useEffect(() => {
-    if (isMobileMenuOpen) {
+    const isAdminUser = user?.uid ? VALID_ADMINS.includes(user.uid as any) : false;
+    if (!isAdminUser) {
+      setAdminNotifications([]);
+      return;
+    }
+    const notifRef = collection(db, "users", VENDOR_UID, "admin_notifications");
+    const unsub = onSnapshot(notifRef, (snap) => {
+      const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      items.sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0));
+      setAdminNotifications(items);
+    }, (err) => {
+      console.warn("Could not listen to admin_notifications:", err);
+    });
+    return () => unsub();
+  }, [user]);
+
+  // Keyboard shortcut Cmd+K / Ctrl+K to open search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setIsSearchOpen(prev => !prev);
+      } else if (e.key === "Escape" && isSearchOpen && !selectedSearchProduct) {
+        setIsSearchOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isSearchOpen, selectedSearchProduct]);
+
+  // Lazy-load searchable products when search modal opens
+  useEffect(() => {
+    if (!isSearchOpen || hasLoadedSearchProducts || loadingSearchProducts) return;
+    const loadSearchCatalog = async () => {
+      setLoadingSearchProducts(true);
+      try {
+        const vendorUid = VENDOR_UID;
+        const q = query(collection(db, "users", vendorUid, "nail_sets"), where("isForSale", "==", true));
+        const [snapshot, imagesSnapshot] = await Promise.all([
+          getDocs(q),
+          getDocs(collection(db, "users", vendorUid, "set_images"))
+        ]);
+        const allSetImages = imagesSnapshot.docs.map(d => d.data());
+        const fetched = snapshot.docs.map(d => {
+          const data = d.data();
+          const syncId = data.syncId || d.id;
+          const androidExtraImages = allSetImages
+            .filter(img => img.setSyncId === syncId && img.uri)
+            .sort((a, b) => (a.position || 0) - (b.position || 0))
+            .map(img => formatStorageImageUrl(img.uri as string, vendorUid));
+          const mergedExtraImages = Array.from(
+            new Set([
+              ...(data.additionalImages || []).map((u: string) => formatStorageImageUrl(u, vendorUid)),
+              ...androidExtraImages
+            ])
+          );
+          let primaryImage = data.imagePath;
+          if ((!primaryImage || !primaryImage.startsWith("http")) && mergedExtraImages.length > 0) {
+            primaryImage = mergedExtraImages.find(img => img.startsWith("http")) || mergedExtraImages[0];
+          } else {
+            primaryImage = formatStorageImageUrl(primaryImage, vendorUid);
+          }
+          const finalExtraImages = mergedExtraImages.filter(img => img !== primaryImage);
+          return {
+            id: d.id,
+            docPath: d.ref.path,
+            name: data.name || "Unnamed Set",
+            basePrice: data.basePrice || 0,
+            priceOnAsk: data.priceOnAsk === true,
+            imagePath: primaryImage || "https://images.unsplash.com/photo-1519014816548-bf5fe059e98b?auto=format&fit=crop&q=80&w=800",
+            additionalImages: finalExtraImages,
+            description: data.description || "",
+            defaultShape: data.defaultShape || "Almond",
+            defaultLength: data.defaultLength || "M",
+            hiddenShapes: Array.isArray(data.hiddenShapes) ? data.hiddenShapes : [],
+            hiddenLengths: Array.isArray(data.hiddenLengths) ? data.hiddenLengths : [],
+            isPromo: data.isPromo === true,
+            category: data.category || "Standard",
+            tags: data.tags || [],
+            type: data.type || "Sets",
+            syncId
+          } as Product;
+        });
+        setSearchableProducts(fetched);
+        setHasLoadedSearchProducts(true);
+      } catch (err) {
+        console.error("Error loading search catalog:", err);
+      } finally {
+        setLoadingSearchProducts(false);
+      }
+    };
+    loadSearchCatalog();
+  }, [isSearchOpen, hasLoadedSearchProducts, loadingSearchProducts]);
+
+  const filteredSearchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return searchableProducts.slice(0, 8);
+    const terms = q.split(/\s+/).filter(Boolean);
+    return searchableProducts.filter(p => {
+      const searchableText = [
+        p.name || "",
+        p.description || "",
+        p.type || "",
+        p.category || "",
+        ...(p.tags || [])
+      ].join(" ").toLowerCase();
+      return terms.every(term => searchableText.includes(term));
+    });
+  }, [searchQuery, searchableProducts]);
+
+  const dismissNotification = async (notifId: string) => {
+    try {
+      await deleteDoc(doc(db, "users", VENDOR_UID, "admin_notifications", notifId));
+    } catch (e) {
+      console.error("Failed to dismiss notification:", e);
+    }
+  };
+
+  const clearAllNotifications = async () => {
+    try {
+      await Promise.all(
+        adminNotifications.map(n => deleteDoc(doc(db, "users", VENDOR_UID, "admin_notifications", n.id)))
+      );
+      setShowNotifDropdown(false);
+    } catch (e) {
+      console.error("Failed to clear notifications:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (isMobileMenuOpen || isSearchOpen || selectedSearchProduct) {
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "";
@@ -70,12 +238,12 @@ export default function GlobalHeader() {
     return () => {
       document.body.style.overflow = "";
     };
-  }, [isMobileMenuOpen]);
+  }, [isMobileMenuOpen, isSearchOpen, selectedSearchProduct]);
 
   useEffect(() => {
     const fetchRibbon = async () => {
       try {
-        const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+        const vendorUid = VENDOR_UID;
         
         // Fetch all collection settings
         const snap = await getDocs(collection(db, "users", vendorUid, "collection_settings"));
@@ -132,7 +300,7 @@ export default function GlobalHeader() {
 
   const saveRibbonOrder = async (newOrder: string[]) => {
     try {
-      const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+      const vendorUid = VENDOR_UID;
       await setDoc(doc(db, "users", vendorUid, "collection_settings", "--ribbon_layout--"), { order: newOrder }, { merge: true });
     } catch(e) { console.error("Error saving order", e); }
   };
@@ -160,9 +328,6 @@ export default function GlobalHeader() {
   const handleDragEnd = async () => {
     const finalItem = draggedItem;
     setDraggedItem(null);
-    // saveRibbonOrder requires the latest state. We can use a setTimeout or a dedicated save button.
-    // However, since we just updated state, we can't reliably read ribbonOrder here immediately.
-    // We'll use a functional state update trick to read it and save it.
     setRibbonOrder(prev => {
       saveRibbonOrder(prev);
       return prev;
@@ -180,7 +345,7 @@ export default function GlobalHeader() {
     
     if (!CORE_TAGS.includes(tagToRemove)) {
       try {
-        const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+        const vendorUid = VENDOR_UID;
         const metaDoc = await getDoc(doc(db, "users", vendorUid, "collection_settings", tagToRemove));
           if (metaDoc.exists()) {
             await setDoc(doc(db, "users", vendorUid, "collection_settings", tagToRemove), { inRibbon: false }, { merge: true });
@@ -198,7 +363,7 @@ export default function GlobalHeader() {
       await saveRibbonOrder(newOrder);
       if (!CORE_TAGS.includes(tagToAdd)) {
         try {
-          const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+          const vendorUid = VENDOR_UID;
           await setDoc(doc(db, "users", vendorUid, "collection_settings", tagToAdd), { inRibbon: true }, { merge: true });
           setAllCollections(prev => prev.map(c => c.tag === tagToAdd ? { ...c, inRibbon: true } : c));
         } catch(err) {}
@@ -219,7 +384,7 @@ export default function GlobalHeader() {
     if (!tag) return;
     
     try {
-      const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+      const vendorUid = VENDOR_UID;
       await setDoc(doc(db, "users", vendorUid, "collection_settings", tag), {
         tag, title, inRibbon: true
       });
@@ -247,8 +412,7 @@ export default function GlobalHeader() {
   if (pathname === '/admin') return null;
 
   const isActive = (path: string) => pathname === path;
-  const VALID_ADMINS = ["0TMvGP1VIja7VzVM87MPQaacoY03", "CMzpkonBxKeLboaVTUYwDWgiwNG3"];
-  const isAdmin = user?.uid ? VALID_ADMINS.includes(user.uid) : false;
+  const isAdmin = user?.uid ? VALID_ADMINS.includes(user.uid as any) : false;
 
   const getLinkDetails = (tag: string) => {
     if (tag === 'home') return { title: 'HOME', href: '/' };
@@ -357,6 +521,115 @@ export default function GlobalHeader() {
                   </>
                 )}
 
+                {/* Admin Notification Bell */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowNotifDropdown(prev => !prev)}
+                    className="relative flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white px-2.5 py-1 rounded-full border border-white/15 transition cursor-pointer"
+                    title="Studio Alerts & Notifications"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5 text-pink-300">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+                    </svg>
+                    <span className="text-[11px] font-bold hidden sm:inline">Alerts</span>
+                    {adminNotifications.length > 0 && (
+                      <span className="bg-[#FF5C9D] text-white text-[10px] font-black px-1.5 py-0.2 rounded-full min-w-[18px] text-center shadow-sm">
+                        {adminNotifications.length}
+                      </span>
+                    )}
+                  </button>
+
+                  {showNotifDropdown && (
+                    <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-neutral-900 border border-pink-500/40 rounded-2xl shadow-2xl z-[120] overflow-hidden text-white animate-in fade-in duration-150">
+                      <div className="px-4 py-3 bg-neutral-950 border-b border-white/10 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black uppercase tracking-widest text-pink-400">Studio Alerts</span>
+                          <span className="bg-white/10 text-neutral-300 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            {adminNotifications.length}
+                          </span>
+                        </div>
+                        {adminNotifications.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={clearAllNotifications}
+                            className="text-[10px] font-bold text-neutral-400 hover:text-red-400 transition cursor-pointer"
+                          >
+                            Clear All
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="max-h-80 overflow-y-auto divide-y divide-white/10">
+                        {adminNotifications.length === 0 ? (
+                          <div className="p-6 text-center text-neutral-400 text-xs">
+                            No new studio alerts right now ✨
+                          </div>
+                        ) : (
+                          adminNotifications.map((notif: any) => {
+                            const isSecurity = notif.type === "LINK_ATTEMPT_DENIED";
+                            const dateStr = notif.timestamp
+                              ? new Date(notif.timestamp).toLocaleString("en-IE", {
+                                  day: "numeric",
+                                  month: "short",
+                                  hour: "2-digit",
+                                  minute: "2-digit"
+                                })
+                              : "";
+                            return (
+                              <div key={notif.id} className="p-3.5 hover:bg-white/5 transition flex items-start justify-between gap-3">
+                                <div className="space-y-1 flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span
+                                      className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                                        isSecurity
+                                          ? "bg-red-500/20 text-red-300 border border-red-500/30"
+                                          : "bg-pink-500/20 text-pink-300 border border-pink-500/30"
+                                      }`}
+                                    >
+                                      {isSecurity ? "🔒 Security Alert" : "🛍️ New Web Order"}
+                                    </span>
+                                    {dateStr && <span className="text-[10px] text-neutral-400">{dateStr}</span>}
+                                  </div>
+
+                                  {isSecurity ? (
+                                    <p className="text-xs text-neutral-200 leading-snug">
+                                      Unverified profile link attempt for{" "}
+                                      <span className="font-bold text-white">{notif.clientName || "Client"}</span> from{" "}
+                                      <span className="text-amber-300">{notif.attemptedByEmail || "unknown email"}</span>.
+                                    </p>
+                                  ) : (
+                                    <div className="text-xs text-neutral-200 leading-snug space-y-0.5">
+                                      <p>
+                                        <span className="font-bold text-white">{notif.clientName || "Customer"}</span> placed order{" "}
+                                        <span className="font-bold text-pink-300">{notif.orderNumber || ""}</span>
+                                        {typeof notif.totalPrice === "number" ? ` (€${notif.totalPrice.toFixed(2)})` : ""}
+                                      </p>
+                                      <p className="text-[11px] text-neutral-400">
+                                        {notif.itemCount || 1} set(s)
+                                        {notif.hasCustomSizes ? " • 📏 Custom mm sizes" : ""}
+                                        {notif.inspoCount ? ` • 📸 ${notif.inspoCount} inspo photo(s)` : ""}
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => dismissNotification(notif.id)}
+                                  className="text-neutral-500 hover:text-white p-1 text-xs cursor-pointer"
+                                  title="Dismiss"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <Link
                   href="/admin"
                   className="text-pink-300 hover:text-white transition-colors underline underline-offset-2 text-xs font-bold whitespace-nowrap ml-1"
@@ -387,7 +660,21 @@ export default function GlobalHeader() {
             
             <div className="hidden md:block flex-1"></div>
 
-            <div className="flex items-center gap-3 ml-auto">
+            <div className="flex items-center gap-2 sm:gap-3 ml-auto">
+              {/* Instant Search Trigger Button */}
+              <button
+                type="button"
+                onClick={() => setIsSearchOpen(true)}
+                className="flex items-center gap-2 text-neutral-700 hover:text-[#FF5C9D] bg-pink-50/70 hover:bg-pink-100/70 border border-pink-100 px-3 py-1.5 rounded-full transition-all cursor-pointer"
+                aria-label="Search Designs"
+                title="Search Designs (Ctrl+K)"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-[#FF5C9D]">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                </svg>
+                <span className="text-[11px] font-bold text-neutral-600 hidden sm:inline">Search designs...</span>
+              </button>
+
               {!user ? (
                 <button onClick={handleSignIn} className="text-[10px] font-bold text-white bg-black hover:bg-neutral-800 px-4 py-2 rounded-full transition whitespace-nowrap">SIGN IN</button>
               ) : (
@@ -601,6 +888,20 @@ export default function GlobalHeader() {
 
             {/* Drawer Scrollable Body */}
             <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
+              {/* Mobile Search Trigger */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setIsSearchOpen(true);
+                }}
+                className="w-full flex items-center gap-2.5 bg-pink-50/80 hover:bg-pink-100/80 border border-pink-200/80 rounded-2xl px-4 py-3 text-left transition-colors cursor-pointer"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-[#FF5C9D]">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                </svg>
+                <span className="text-xs font-bold text-neutral-600">Search designs, colours, tags...</span>
+              </button>
               
               {/* Tier 1: SHOP COLLECTIONS */}
               <div>
@@ -931,6 +1232,203 @@ export default function GlobalHeader() {
           </div>
         </div>
       )}
+
+      {/* 4. Instant Full-Text Search Modal */}
+      {isSearchOpen && (
+        <div className="fixed inset-0 z-[150] flex items-start justify-center pt-10 sm:pt-20 px-4 pb-6">
+          <div
+            className="fixed inset-0 bg-neutral-950/60 backdrop-blur-md transition-opacity"
+            onClick={() => setIsSearchOpen(false)}
+          />
+          <div className="relative z-10 w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-pink-100 overflow-hidden flex flex-col max-h-[82vh] animate-slide-up">
+            {/* Search Input Bar */}
+            <div className="p-4 sm:p-5 border-b border-pink-100 bg-gradient-to-r from-pink-50/50 via-white to-pink-50/30 flex items-center gap-3">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-5 h-5 text-[#FF5C9D] shrink-0">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+              </svg>
+              <input
+                type="text"
+                autoFocus
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search by design name, description, colour, or tag..."
+                className="flex-1 bg-transparent text-sm sm:text-base font-bold text-neutral-900 placeholder:text-neutral-400 outline-none"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="text-xs font-bold text-neutral-400 hover:text-neutral-700 px-2 py-1 rounded-full bg-neutral-100 cursor-pointer"
+                >
+                  Clear
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsSearchOpen(false)}
+                className="p-1.5 text-neutral-400 hover:text-black rounded-full hover:bg-neutral-100 transition cursor-pointer"
+                aria-label="Close Search"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Quick Filter Suggestion Chips */}
+            <div className="px-4 sm:px-5 py-2.5 bg-neutral-50/70 border-b border-neutral-100 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400 mr-1 shrink-0">
+                Popular:
+              </span>
+              {["Chrome", "French", "Pink", "Goth", "Cat Eye", "3D", "Minis", "Keychains"].map(chip => (
+                <button
+                  key={chip}
+                  type="button"
+                  onClick={() => setSearchQuery(chip)}
+                  className={`text-[11px] font-bold px-2.5 py-1 rounded-full border transition shrink-0 cursor-pointer ${
+                    searchQuery.toLowerCase() === chip.toLowerCase()
+                      ? "bg-[#FF5C9D] text-white border-[#FF5C9D]"
+                      : "bg-white text-neutral-600 border-neutral-200 hover:border-pink-300 hover:text-[#FF5C9D]"
+                  }`}
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+
+            {/* Search Results Body */}
+            <div className="p-4 sm:p-5 overflow-y-auto flex-1">
+              {loadingSearchProducts ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {[1, 2, 3, 4].map(n => (
+                    <div key={n} className="flex items-center gap-3 p-2.5 rounded-2xl border border-pink-100/60 bg-pink-50/20 animate-pulse">
+                      <div className="w-16 h-16 rounded-xl bg-pink-100/70 shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-3.5 bg-pink-100/80 rounded w-3/4" />
+                        <div className="h-2.5 bg-pink-100/60 rounded w-1/2" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : filteredSearchResults.length === 0 ? (
+                <div className="py-12 text-center">
+                  <p className="text-sm font-bold text-neutral-800 mb-1">
+                    No designs found matching &ldquo;{searchQuery}&rdquo;
+                  </p>
+                  <p className="text-xs text-neutral-500 mb-4">
+                    Try searching for a different keyword, vibe, colour, or product type.
+                  </p>
+                  <Link
+                    href="/collections/all"
+                    onClick={() => setIsSearchOpen(false)}
+                    className="inline-block bg-black text-white text-xs font-bold uppercase tracking-wider px-5 py-2.5 rounded-full hover:bg-[#FF5C9D] transition"
+                  >
+                    Browse All Designs →
+                  </Link>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
+                      {searchQuery.trim()
+                        ? `${filteredSearchResults.length} Matching Result${filteredSearchResults.length === 1 ? "" : "s"}`
+                        : "Featured Studio Designs"}
+                    </span>
+                    <Link
+                      href="/collections/all"
+                      onClick={() => setIsSearchOpen(false)}
+                      className="text-[11px] font-bold text-[#FF5C9D] hover:underline"
+                    >
+                      View Full Catalog →
+                    </Link>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {filteredSearchResults.slice(0, 20).map(item => (
+                      <div
+                        key={item.id}
+                        onClick={() => {
+                          setIsSearchOpen(false);
+                          setSelectedSearchProduct(item);
+                        }}
+                        className="flex items-center gap-3 p-2.5 rounded-2xl border border-neutral-100 hover:border-pink-300 bg-white hover:bg-pink-50/40 transition-all cursor-pointer group shadow-sm"
+                      >
+                        <div className="relative w-16 h-16 rounded-xl overflow-hidden bg-pink-50 shrink-0">
+                          <Image
+                            src={item.imagePath}
+                            alt={item.name}
+                            fill
+                            className="object-cover group-hover:scale-105 transition-transform"
+                            sizes="64px"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <h4 className="text-xs sm:text-sm font-bold text-neutral-900 truncate group-hover:text-[#FF5C9D] transition-colors">
+                              {item.name}
+                            </h4>
+                            <span className="text-xs font-black text-[#FF5C9D] shrink-0">
+                              {item.priceOnAsk ? "POA" : `€${item.basePrice.toFixed(2)}`}
+                            </span>
+                          </div>
+                          {item.description && (
+                            <p className="text-[11px] text-neutral-500 line-clamp-1 mt-0.5">
+                              {item.description}
+                            </p>
+                          )}
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {item.type && (
+                              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-600">
+                                {item.type}
+                              </span>
+                            )}
+                            {(item.tags || []).slice(0, 2).map(t => (
+                              <span
+                                key={t}
+                                className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-pink-50 text-pink-600"
+                              >
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Product Detail Drawer triggered from Search */}
+      {selectedSearchProduct && (
+        <ProductDetailDrawer
+          product={selectedSearchProduct}
+          onClose={() => setSelectedSearchProduct(null)}
+          currentUser={user}
+          clientProfile={clientProfile}
+          onOpenLightbox={(idx) => {
+            setLightboxIndex(idx);
+            setLightboxOpen(true);
+          }}
+          onOpenShapeGuide={() => setShowShapeGuide(true)}
+        />
+      )}
+
+      {selectedSearchProduct && (
+        <ProductLightbox
+          isOpen={lightboxOpen}
+          images={[selectedSearchProduct.imagePath, ...(selectedSearchProduct.additionalImages || [])]}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxOpen(false)}
+          title={selectedSearchProduct.name}
+        />
+      )}
+
+      <ShapeSizingGuideModal
+        isOpen={showShapeGuide}
+        onClose={() => setShowShapeGuide(false)}
+      />
     </>
   );
 }

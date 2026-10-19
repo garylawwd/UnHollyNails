@@ -5,6 +5,7 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, User, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { collection, query, where, getDocs, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { Product } from '@/lib/types';
+import { VENDOR_UID } from '@/lib/constants';
 
 interface WishlistContextType {
   wishlistIds: string[];
@@ -25,7 +26,7 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
 
-  const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+  const vendorUid = VENDOR_UID;
 
   // Track auth
   useEffect(() => {

@@ -9,6 +9,8 @@ export interface Product {
   description?: string;
   defaultShape?: string;
   defaultLength?: string;
+  hiddenShapes?: string[];
+  hiddenLengths?: string[];
   isPromo: boolean;
   category: string;
   tags: string[];
@@ -30,4 +32,11 @@ export interface CollectionMeta {
   ombreEnd?: string;
   bgScale?: number;
   includedProductIds?: string[];
+}
+
+export interface LoyaltyConfig {
+  defaultReward?: string;
+  secondaryReward?: string;
+  quickPresets?: string[];
+  updatedAt?: number;
 }

@@ -3,16 +3,16 @@
 import React, { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { useAdmin } from "@/context/AdminContext";
-import { doc, updateDoc, collection, getDocs, query } from "firebase/firestore";
+import { doc, setDoc, deleteDoc, collection, getDocs, query, where } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage, auth } from "@/lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
-
-const SHAPE_OPTIONS = ["Almond", "Stiletto", "Coffin", "Square", "Oval", "Round"];
-const LENGTH_OPTIONS = ["XS", "S", "M", "L", "XL"];
+import { VENDOR_UID, isAdminUid } from "@/lib/constants";
+import { useNailOptions } from "@/hooks/useNailOptions";
 
 export default function GlobalProductEditor() {
   const { editingProduct, setEditingProduct } = useAdmin();
+  const { shapes: SHAPE_OPTIONS, lengths: LENGTH_OPTIONS, addShape, addLength } = useNailOptions();
   const [saving, setSaving] = useState(false);
   const [tagInput, setTagInput] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -21,27 +21,32 @@ export default function GlobalProductEditor() {
   const [mainPreviewUrl, setMainPreviewUrl] = useState<string | null>(null);
   const [adminUser, setAdminUser] = useState<User | null>(null);
   const [existingTags, setExistingTags] = useState<string[]>([]);
+  const [customNewShape, setCustomNewShape] = useState("");
+  const [customNewLength, setCustomNewLength] = useState("");
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, u => setAdminUser(u));
+    const unsub = onAuthStateChanged(auth, u => {
+      setAdminUser(u && isAdminUid(u.uid) ? u : null);
+    });
     return () => unsub();
   }, []);
 
   useEffect(() => {
     setNewMainFile(null);
     setMainPreviewUrl(null);
+    setCustomNewShape("");
+    setCustomNewLength("");
   }, [editingProduct?.id]);
 
   useEffect(() => {
     if (editingProduct && adminUser) {
       // Fetch all unique tags for datalist just once when editor opens
       const fetchTags = async () => {
-        const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || adminUser.uid;
-        const q = query(collection(db, "users", vendorUid, "nail_sets"));
+        const q = query(collection(db, "users", VENDOR_UID, "nail_sets"));
         const snap = await getDocs(q);
         const tags = new Set<string>();
-        snap.forEach(doc => {
-          const t = doc.data().tags || [];
+        snap.forEach(docSnap => {
+          const t = docSnap.data().tags || [];
           t.forEach((tag: string) => tags.add(tag));
         });
         setExistingTags(Array.from(tags));
@@ -128,13 +133,14 @@ export default function GlobalProductEditor() {
     if (!adminUser) return;
     setSaving(true);
     try {
-      const pRef = doc(db, editingProduct.docPath);
+      const targetSetSyncId = editingProduct.syncId || editingProduct.id;
+      const pRef = doc(db, editingProduct.docPath || `users/${VENDOR_UID}/nail_sets/${targetSetSyncId}`);
       let newImagePath = editingProduct.imagePath;
       let newAdditionalImages = [...(editingProduct.additionalImages || [])];
       
       // Upload new main photo if one was selected
       if (newMainFile) {
-        const storageReference = ref(storage, `users/${adminUser.uid}/images/storefront_${Date.now()}_main_${newMainFile.name}`);
+        const storageReference = ref(storage, `users/${VENDOR_UID}/images/storefront_${Date.now()}_main_${newMainFile.name}`);
         await uploadBytes(storageReference, newMainFile);
         newImagePath = await getDownloadURL(storageReference);
       }
@@ -142,7 +148,7 @@ export default function GlobalProductEditor() {
       if (fileInputRef.current?.files && fileInputRef.current.files.length > 0) {
         const files = Array.from(fileInputRef.current.files);
         for (const file of files) {
-          const storageReference = ref(storage, `users/${adminUser.uid}/images/storefront_${Date.now()}_${file.name}`);
+          const storageReference = ref(storage, `users/${VENDOR_UID}/images/storefront_${Date.now()}_${file.name}`);
           await uploadBytes(storageReference, file);
           const url = await getDownloadURL(storageReference);
           
@@ -154,19 +160,72 @@ export default function GlobalProductEditor() {
         }
       }
 
-      await updateDoc(pRef, {
+      // Deduplicate extra images and ensure main image isn't duplicated
+      newAdditionalImages = Array.from(new Set(newAdditionalImages)).filter(
+        url => Boolean(url) && url !== newImagePath
+      );
+
+      const now = Date.now();
+
+      await setDoc(pRef, {
+        id: 0,
+        syncId: targetSetSyncId,
         name: editingProduct.name,
-        basePrice: Number(editingProduct.basePrice),
-        priceOnAsk: editingProduct.priceOnAsk,
-        description: editingProduct.description,
-        defaultShape: editingProduct.defaultShape,
-        defaultLength: editingProduct.defaultLength,
-        isPromo: editingProduct.isPromo,
-        tags: editingProduct.tags,
+        basePrice: Number(editingProduct.basePrice) || 0,
+        priceOnAsk: Boolean(editingProduct.priceOnAsk),
+        description: editingProduct.description || "",
+        defaultShape: editingProduct.defaultShape || "Almond",
+        defaultLength: editingProduct.defaultLength || "M",
+        hiddenShapes: editingProduct.hiddenShapes || [],
+        hiddenLengths: editingProduct.hiddenLengths || [],
+        isPromo: Boolean(editingProduct.isPromo),
+        tags: editingProduct.tags || [],
         type: editingProduct.type || "Sets",
         imagePath: newImagePath,
-        additionalImages: newAdditionalImages
-      });
+        additionalImages: newAdditionalImages,
+        updatedAt: now
+      }, { merge: true });
+
+      // Two-way sync with PressOnPro's set_images subcollection
+      try {
+        const setImagesCol = collection(db, "users", VENDOR_UID, "set_images");
+        const existingSnap = await getDocs(
+          query(setImagesCol, where("setSyncId", "==", targetSetSyncId))
+        );
+        const existingDocs = existingSnap.docs.map(d => ({
+          docId: d.id,
+          ...(d.data() as { uri?: string; syncId?: string; position?: number })
+        }));
+
+        const validUris = new Set<string>(newAdditionalImages);
+        if (newImagePath && !newImagePath.includes("unsplash")) {
+          validUris.add(newImagePath);
+        }
+
+        // Remove any set_images docs that were deleted in the editor
+        for (const oldDoc of existingDocs) {
+          if (!oldDoc.uri || !validUris.has(oldDoc.uri)) {
+            await deleteDoc(doc(db, "users", VENDOR_UID, "set_images", oldDoc.docId));
+          }
+        }
+
+        // Upsert all current extra images with their ordered position
+        for (let idx = 0; idx < newAdditionalImages.length; idx++) {
+          const url = newAdditionalImages[idx];
+          const match = existingDocs.find(d => d.uri === url);
+          const imgSyncId = match?.syncId || match?.docId || crypto.randomUUID();
+          await setDoc(doc(db, "users", VENDOR_UID, "set_images", imgSyncId), {
+            syncId: imgSyncId,
+            setSyncId: targetSetSyncId,
+            setId: 0,
+            uri: url,
+            position: idx,
+            updatedAt: now
+          }, { merge: true });
+        }
+      } catch (syncErr) {
+        console.warn("Could not sync set_images subcollection:", syncErr);
+      }
 
       setEditingProduct(null);
       window.location.reload(); // Quickest way to refresh all stale views
@@ -250,13 +309,162 @@ export default function GlobalProductEditor() {
                 <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Default Shape</label>
                 <select value={editingProduct.defaultShape || ''} onChange={e => setEditingProduct({...editingProduct, defaultShape: e.target.value})} className="w-full border rounded-lg px-3 py-2 bg-white">
                   {SHAPE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  <option value="Other">+ Other (Add New Shape...)</option>
                 </select>
+                {editingProduct.defaultShape === "Other" && (
+                  <div className="flex gap-1.5 mt-2">
+                    <input
+                      type="text"
+                      value={customNewShape}
+                      onChange={e => setCustomNewShape(e.target.value)}
+                      placeholder="New shape (e.g. Ballerina)..."
+                      className="flex-1 border rounded-lg px-2.5 py-1.5 text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const val = customNewShape.trim();
+                        if (!val) return;
+                        await addShape(val);
+                        setEditingProduct({ ...editingProduct, defaultShape: val });
+                        setCustomNewShape("");
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg bg-pink-500 hover:bg-pink-600 text-white text-xs font-bold whitespace-nowrap cursor-pointer"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-bold text-neutral-500 uppercase mb-1">Default Length</label>
                 <select value={editingProduct.defaultLength || ''} onChange={e => setEditingProduct({...editingProduct, defaultLength: e.target.value})} className="w-full border rounded-lg px-3 py-2 bg-white">
                   {LENGTH_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  <option value="Other">+ Other (Add New Length...)</option>
                 </select>
+                {editingProduct.defaultLength === "Other" && (
+                  <div className="flex gap-1.5 mt-2">
+                    <input
+                      type="text"
+                      value={customNewLength}
+                      onChange={e => setCustomNewLength(e.target.value)}
+                      placeholder="New length (e.g. XXL)..."
+                      className="flex-1 border rounded-lg px-2.5 py-1.5 text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const val = customNewLength.trim();
+                        if (!val) return;
+                        await addLength(val);
+                        setEditingProduct({ ...editingProduct, defaultLength: val });
+                        setCustomNewLength("");
+                      }}
+                      className="px-2.5 py-1.5 rounded-lg bg-pink-500 hover:bg-pink-600 text-white text-xs font-bold whitespace-nowrap cursor-pointer"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* HIDE / SHOW SHAPES & LENGTHS PER PRODUCT */}
+            <div className="p-4 border rounded-xl bg-neutral-50/90 space-y-4">
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-xs font-bold text-neutral-800 uppercase tracking-wide">
+                    Shape Availability (Click to Hide / Show)
+                  </label>
+                  <span className="text-[11px] font-semibold text-neutral-500">
+                    {(editingProduct.hiddenShapes || []).length > 0
+                      ? `${(editingProduct.hiddenShapes || []).length} hidden`
+                      : "All visible"}
+                  </span>
+                </div>
+                <p className="text-[11px] text-neutral-500 mb-2">
+                  Some nail sets cannot be crafted in certain shapes. Tap any shape to hide it from the options list on the website for this item.
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {SHAPE_OPTIONS.map((shape) => {
+                    const isHidden = (editingProduct.hiddenShapes || []).includes(shape);
+                    return (
+                      <button
+                        key={shape}
+                        type="button"
+                        onClick={() => {
+                          const current = editingProduct.hiddenShapes || [];
+                          const updated = isHidden
+                            ? current.filter((s) => s !== shape)
+                            : [...current, shape];
+                          setEditingProduct({
+                            ...editingProduct,
+                            hiddenShapes: updated,
+                          });
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm ${
+                          isHidden
+                            ? "bg-neutral-200 text-neutral-400 line-through border border-neutral-300"
+                            : "bg-white text-neutral-800 border border-neutral-300 hover:border-pink-500 hover:text-pink-600"
+                        }`}
+                        title={isHidden ? `Click to show ${shape}` : `Click to hide ${shape}`}
+                      >
+                        <span className={isHidden ? "text-red-500 font-black text-xs" : "text-emerald-500 font-black text-xs"}>
+                          {isHidden ? "✕" : "✓"}
+                        </span>
+                        <span>{shape}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-neutral-200">
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-xs font-bold text-neutral-800 uppercase tracking-wide">
+                    Length Availability (Click to Hide / Show)
+                  </label>
+                  <span className="text-[11px] font-semibold text-neutral-500">
+                    {(editingProduct.hiddenLengths || []).length > 0
+                      ? `${(editingProduct.hiddenLengths || []).length} hidden`
+                      : "All visible"}
+                  </span>
+                </div>
+                <p className="text-[11px] text-neutral-500 mb-2">
+                  Tap any length to hide it from the options list on the website for this item.
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {LENGTH_OPTIONS.map((length) => {
+                    const isHidden = (editingProduct.hiddenLengths || []).includes(length);
+                    return (
+                      <button
+                        key={length}
+                        type="button"
+                        onClick={() => {
+                          const current = editingProduct.hiddenLengths || [];
+                          const updated = isHidden
+                            ? current.filter((l) => l !== length)
+                            : [...current, length];
+                          setEditingProduct({
+                            ...editingProduct,
+                            hiddenLengths: updated,
+                          });
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm ${
+                          isHidden
+                            ? "bg-neutral-200 text-neutral-400 line-through border border-neutral-300"
+                            : "bg-white text-neutral-800 border border-neutral-300 hover:border-pink-500 hover:text-pink-600"
+                        }`}
+                        title={isHidden ? `Click to show ${length}` : `Click to hide ${length}`}
+                      >
+                        <span className={isHidden ? "text-red-500 font-black text-xs" : "text-emerald-500 font-black text-xs"}>
+                          {isHidden ? "✕" : "✓"}
+                        </span>
+                        <span>{length}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 

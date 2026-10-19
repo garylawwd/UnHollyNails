@@ -2,13 +2,15 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import Image from "next/image";
-import { collection, collectionGroup, getDocs, doc, writeBatch, setDoc, getDoc, deleteDoc } from "firebase/firestore";
+import { collection, collectionGroup, getDocs, doc, writeBatch, setDoc, getDoc, deleteDoc, query, where } from "firebase/firestore";
 import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User } from "firebase/auth";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, auth, storage } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import { useAdmin } from "@/context/AdminContext";
 import { Product } from "@/lib/types";
+import { VENDOR_UID, VALID_ADMINS, formatStorageImageUrl } from "@/lib/constants";
+import { useNailOptions } from "@/hooks/useNailOptions";
 
 interface CollectionMeta {
   tag: string;
@@ -25,15 +27,47 @@ interface CollectionMeta {
   includedProductIds?: string[];
 }
 
-const STORE_OWNER_UID = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
-const VALID_ADMINS = ["0TMvGP1VIja7VzVM87MPQaacoY03", "CMzpkonBxKeLboaVTUYwDWgiwNG3"];
+const STORE_OWNER_UID = VENDOR_UID;
 
 export default function AdminDashboard() {
   const [user, setUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   
   const router = useRouter();
-  const { setEditMode } = useAdmin();
+  const { setEditMode, setEditingProduct: setGlobalEditingProduct } = useAdmin();
+  const {
+    shapes: nailShapes,
+    lengths: nailLengths,
+    addShape,
+    removeShape,
+    renameShape,
+    addLength,
+    removeLength,
+    renameLength,
+  } = useNailOptions();
+  const [newShapeInput, setNewShapeInput] = useState("");
+  const [newLengthInput, setNewLengthInput] = useState("");
+  const [editingShapeItem, setEditingShapeItem] = useState<{ old: string; current: string } | null>(null);
+  const [editingLengthItem, setEditingLengthItem] = useState<{ old: string; current: string } | null>(null);
+
+  // Loyalty & Client Milestone State
+  const [defaultLoyaltyReward, setDefaultLoyaltyReward] = useState<string>("Free Delivery");
+  const [secondaryLoyaltyReward, setSecondaryLoyaltyReward] = useState<string>("Free Gift");
+  const [loyaltyQuickPresets, setLoyaltyQuickPresets] = useState<string[]>([
+    "Free Delivery",
+    "Free Gift",
+    "Free Application Pack",
+    "Free Sizing Kit for a Friend",
+    "Free Nail Book",
+    "€10 Off Next Set",
+  ]);
+  const [savingDefaultLoyalty, setSavingDefaultLoyalty] = useState(false);
+  const [adminClients, setAdminClients] = useState<any[]>([]);
+  const [clientSearchQuery, setClientSearchQuery] = useState("");
+  const [selectedClientForLoyalty, setSelectedClientForLoyalty] = useState<any | null>(null);
+  const [clientMilestonesDraft, setClientMilestonesDraft] = useState<Record<string, string>>({});
+  const [savingClientMilestones, setSavingClientMilestones] = useState(false);
+
   const [activeTab, setActiveTab] = useState<"inventory" | "collections" | "studio">("inventory");
   
   const [inventory, setInventory] = useState<Product[]>([]);
@@ -95,15 +129,117 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleSaveDefaultLoyaltyReward = async () => {
+    const cleanedDefault = defaultLoyaltyReward.trim() || "Free Delivery";
+    const cleanedSecondary = secondaryLoyaltyReward.trim() || "Free Gift";
+    setSavingDefaultLoyalty(true);
+    try {
+      await setDoc(
+        doc(db, "users", STORE_OWNER_UID, "store_settings", "loyalty_config"),
+        {
+          defaultReward: cleanedDefault,
+          secondaryReward: cleanedSecondary,
+          quickPresets: loyaltyQuickPresets,
+          updatedAt: Date.now(),
+        },
+        { merge: true }
+      );
+      setDefaultLoyaltyReward(cleanedDefault);
+      setSecondaryLoyaltyReward(cleanedSecondary);
+      showModal("Saved", `Global loyalty defaults saved! (5th: "${cleanedDefault}", 10th: "${cleanedSecondary}")`);
+    } catch (err) {
+      console.error("Failed to save default loyalty reward:", err);
+      showModal("Error", "Could not save default loyalty rewards.");
+    } finally {
+      setSavingDefaultLoyalty(false);
+    }
+  };
+
+  const handleSelectClientForLoyalty = (clientObj: any) => {
+    setSelectedClientForLoyalty(clientObj);
+    const existing: Record<string, string> =
+      clientObj.loyaltyMilestones && typeof clientObj.loyaltyMilestones === "object"
+        ? { ...clientObj.loyaltyMilestones }
+        : {};
+    setClientMilestonesDraft(existing);
+  };
+
+  const handleSaveClientMilestones = async () => {
+    if (!selectedClientForLoyalty) return;
+    setSavingClientMilestones(true);
+    try {
+      const cleanedMap: Record<string, string> = {};
+      Object.entries(clientMilestonesDraft).forEach(([k, v]) => {
+        if (typeof v === "string" && v.trim()) {
+          cleanedMap[k] = v.trim();
+        }
+      });
+      const targetId = selectedClientForLoyalty.syncId || selectedClientForLoyalty.docId;
+      await setDoc(
+        doc(db, "users", STORE_OWNER_UID, "clients", targetId),
+        {
+          id: 0,
+          loyaltyMilestones: cleanedMap,
+          updatedAt: Date.now(),
+        },
+        { merge: true }
+      );
+      setAdminClients((prev) =>
+        prev.map((c) =>
+          (c.syncId || c.docId) === targetId
+            ? { ...c, loyaltyMilestones: cleanedMap }
+            : c
+        )
+      );
+      setSelectedClientForLoyalty((prev: any) =>
+        prev ? { ...prev, loyaltyMilestones: cleanedMap } : null
+      );
+      showModal(
+        "Saved",
+        `Custom loyalty milestones saved for ${selectedClientForLoyalty.name || "client"}!`
+      );
+    } catch (err) {
+      console.error("Failed to save client milestones:", err);
+      showModal("Error", "Could not save client milestones.");
+    } finally {
+      setSavingClientMilestones(false);
+    }
+  };
+
   const fetchInventory = async (uid: string) => {
     setLoadingInventory(true);
     try {
+      // Load global default loyalty reward & client list for Loyalty Manager
+      try {
+        const loyaltySnap = await getDoc(doc(db, "users", uid, "store_settings", "loyalty_config"));
+        if (loyaltySnap.exists()) {
+          const lData = loyaltySnap.data();
+          if (typeof lData.defaultReward === "string") {
+            setDefaultLoyaltyReward(lData.defaultReward || "Free Delivery");
+          }
+          if (typeof lData.secondaryReward === "string") {
+            setSecondaryLoyaltyReward(lData.secondaryReward || "Free Gift");
+          }
+          if (Array.isArray(lData.quickPresets) && lData.quickPresets.length > 0) {
+            setLoyaltyQuickPresets(lData.quickPresets);
+          }
+        }
+        const clientsSnap = await getDocs(collection(db, "users", uid, "clients"));
+        const loadedClients = clientsSnap.docs
+          .map((d) => ({ docId: d.id, ...d.data() } as any))
+          .filter((c) => !c.isDeleted)
+          .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+        setAdminClients(loadedClients);
+      } catch (e) {
+        console.warn("Could not load loyalty config or clients:", e);
+      }
+
       // Fetch all items for this user (no isForSale filter)
       const q = collection(db, "users", uid, "nail_sets");
       const snapshot = await getDocs(q);
       
-      // Fetch the Android app's separate multi-photo collection
-      const imagesSnapshot = await getDocs(collectionGroup(db, "set_images"));
+      // Fetch the Android app's separate multi-photo collection for this vendor
+      const imagesSnapshot = await getDocs(collection(db, "users", uid, "set_images"));
       const allSetImages = imagesSnapshot.docs.map(doc => doc.data());
 
       const items = snapshot.docs.map(d => {
@@ -113,26 +249,22 @@ export default function AdminDashboard() {
         const androidExtraImages = allSetImages
           .filter(img => img.setSyncId === syncId && img.uri)
           .sort((a, b) => (a.position || 0) - (b.position || 0))
-          .map(img => img.uri as string);
+          .map(img => formatStorageImageUrl(img.uri as string, uid));
           
-        let primaryImage = data.imagePath;
-        if ((!primaryImage || !primaryImage.startsWith('http')) && androidExtraImages.length > 0) {
-          // If the main image is a broken local path, use the first valid cloud photo from the extra images!
-          primaryImage = androidExtraImages.find(img => img.startsWith("http")) || androidExtraImages[0];
-        }
+        const webExtraImages = (data.additionalImages || []).map((url: string) =>
+          formatStorageImageUrl(url, uid)
+        );
+        const mergedExtras = Array.from(new Set([...webExtraImages, ...androidExtraImages]));
 
-        // If the Android app saved a local path but successfully uploaded the image bytes to Firebase Storage,
-        // we can magically reconstruct the public Firebase Storage URL by extracting the filename!
-        if (primaryImage && !primaryImage.startsWith('http')) {
-          const filename = primaryImage.split('/').pop();
-          if (filename) {
-            primaryImage = `https://firebasestorage.googleapis.com/v0/b/presson-pro.firebasestorage.app/o/users%2F${uid}%2Fimages%2F${filename}?alt=media`;
-          }
+        let primaryImage = data.imagePath;
+        if ((!primaryImage || !primaryImage.startsWith('http')) && mergedExtras.length > 0) {
+          primaryImage = mergedExtras.find(img => img.startsWith("http")) || mergedExtras[0];
+        } else {
+          primaryImage = formatStorageImageUrl(primaryImage, uid);
         }
 
         // Deduplicate the primary image from the extra images list so it's not doubled up
-        const finalExtraImages = Array.from(new Set([...(data.additionalImages || []), ...androidExtraImages]))
-          .filter(img => img !== primaryImage);
+        const finalExtraImages = mergedExtras.filter(img => img !== primaryImage);
 
         return {
           id: d.id,
@@ -273,14 +405,33 @@ export default function AdminDashboard() {
         newImgUrl = await getDownloadURL(storageReference);
       }
 
-      const updatedProduct = {
+      const updatedProduct: Product = {
         ...editingProduct,
         imagePath: newImgUrl || "",
         description: editingProduct.description || "",
         updatedAt: Date.now()
       };
 
-      await setDoc(doc(db, editingProduct.docPath), updatedProduct, { merge: true });
+      const targetSyncId = editingProduct.syncId || editingProduct.id;
+      const firestorePayload = {
+        id: 0,
+        syncId: targetSyncId,
+        name: updatedProduct.name,
+        description: updatedProduct.description || "",
+        basePrice: Number(updatedProduct.basePrice) || 0,
+        priceOnAsk: Boolean(updatedProduct.priceOnAsk),
+        type: updatedProduct.type || "Sets",
+        isPromo: Boolean(updatedProduct.isPromo),
+        isForSale: updatedProduct.isForSale !== undefined ? Boolean(updatedProduct.isForSale) : true,
+        tags: updatedProduct.tags || [],
+        imagePath: updatedProduct.imagePath || "",
+        additionalImages: updatedProduct.additionalImages || [],
+        defaultShape: updatedProduct.defaultShape || "Almond",
+        defaultLength: updatedProduct.defaultLength || "Medium",
+        updatedAt: Date.now()
+      };
+
+      await setDoc(doc(db, editingProduct.docPath), firestorePayload, { merge: true });
       
       setInventory(prev => {
         const exists = prev.find(p => p.id === updatedProduct.id);
@@ -953,6 +1104,429 @@ export default function AdminDashboard() {
                 </div>
               ))}
             </div>
+
+            {/* DYNAMIC NAIL SHAPES & LENGTHS MANAGER */}
+            <div className="mt-10 bg-white rounded-3xl p-6 sm:p-8 border border-pink-200 shadow-sm">
+              <div className="mb-6">
+                <span className="text-xs font-bold text-[#FF5C9D] uppercase tracking-widest block mb-1">
+                  Synced Store & App Options
+                </span>
+                <h3 className="text-xl sm:text-2xl font-black text-neutral-900 tracking-tight">
+                  💅 Manage Nail Shapes & Lengths
+                </h3>
+                <p className="text-xs sm:text-sm text-neutral-500 mt-1">
+                  Add, rename, or remove the standard nail shapes and lengths shown on the storefront and in PressOnPro. (&ldquo;Other&rdquo; is always included automatically so customers can type custom requests.)
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Shapes Manager */}
+                <div className="bg-neutral-50 rounded-2xl p-5 border border-neutral-200">
+                  <h4 className="font-bold text-sm uppercase tracking-wider text-neutral-800 mb-3">
+                    Standard Nail Shapes ({nailShapes.length})
+                  </h4>
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {nailShapes.map((shape) => (
+                      <div
+                        key={shape}
+                        className="flex items-center gap-1.5 bg-white border border-pink-200 rounded-xl px-3 py-1.5 shadow-xs"
+                      >
+                        {editingShapeItem?.old === shape ? (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="text"
+                              value={editingShapeItem.current}
+                              onChange={(e) =>
+                                setEditingShapeItem({
+                                  old: shape,
+                                  current: e.target.value,
+                                })
+                              }
+                              className="w-24 border border-pink-400 rounded px-1.5 py-0.5 text-xs font-bold"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await renameShape(shape, editingShapeItem.current);
+                                setEditingShapeItem(null);
+                              }}
+                              className="text-xs font-bold text-green-600 hover:underline px-1 cursor-pointer"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingShapeItem(null)}
+                              className="text-xs text-neutral-400 hover:text-black px-1 cursor-pointer"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <span className="text-xs font-bold text-neutral-800">
+                              {shape}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEditingShapeItem({ old: shape, current: shape })
+                              }
+                              className="text-[10px] text-neutral-400 hover:text-pink-600 ml-1 cursor-pointer"
+                              title="Rename shape"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                confirmModal(
+                                  "Remove Shape",
+                                  `Remove "${shape}" from standard store shapes?`,
+                                  () => removeShape(shape)
+                                )
+                              }
+                              className="text-xs text-neutral-400 hover:text-red-500 font-bold ml-0.5 cursor-pointer"
+                              title="Remove shape"
+                            >
+                              ×
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newShapeInput}
+                      onChange={(e) => setNewShapeInput(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (e.key === "Enter" && newShapeInput.trim()) {
+                          e.preventDefault();
+                          await addShape(newShapeInput);
+                          setNewShapeInput("");
+                        }
+                      }}
+                      placeholder="Add new shape (e.g. Ballerina, Duck)..."
+                      className="flex-1 bg-white border border-neutral-200 rounded-xl px-3.5 py-2 text-xs font-medium focus:outline-none focus:border-pink-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!newShapeInput.trim()) return;
+                        await addShape(newShapeInput);
+                        setNewShapeInput("");
+                      }}
+                      className="px-4 py-2 rounded-xl bg-black hover:bg-[#FF5C9D] text-white text-xs font-bold transition cursor-pointer"
+                    >
+                      + Add Shape
+                    </button>
+                  </div>
+                </div>
+
+                {/* Lengths Manager */}
+                <div className="bg-neutral-50 rounded-2xl p-5 border border-neutral-200">
+                  <h4 className="font-bold text-sm uppercase tracking-wider text-neutral-800 mb-3">
+                    Standard Nail Lengths ({nailLengths.length})
+                  </h4>
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {nailLengths.map((len) => (
+                      <div
+                        key={len}
+                        className="flex items-center gap-1.5 bg-white border border-pink-200 rounded-xl px-3 py-1.5 shadow-xs"
+                      >
+                        {editingLengthItem?.old === len ? (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="text"
+                              value={editingLengthItem.current}
+                              onChange={(e) =>
+                                setEditingLengthItem({
+                                  old: len,
+                                  current: e.target.value,
+                                })
+                              }
+                              className="w-20 border border-pink-400 rounded px-1.5 py-0.5 text-xs font-bold"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await renameLength(len, editingLengthItem.current);
+                                setEditingLengthItem(null);
+                              }}
+                              className="text-xs font-bold text-green-600 hover:underline px-1 cursor-pointer"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingLengthItem(null)}
+                              className="text-xs text-neutral-400 hover:text-black px-1 cursor-pointer"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <span className="text-xs font-bold text-neutral-800">
+                              {len}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEditingLengthItem({ old: len, current: len })
+                              }
+                              className="text-[10px] text-neutral-400 hover:text-pink-600 ml-1 cursor-pointer"
+                              title="Rename length"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                confirmModal(
+                                  "Remove Length",
+                                  `Remove "${len}" from standard store lengths?`,
+                                  () => removeLength(len)
+                                )
+                              }
+                              className="text-xs text-neutral-400 hover:text-red-500 font-bold ml-0.5 cursor-pointer"
+                              title="Remove length"
+                            >
+                              ×
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newLengthInput}
+                      onChange={(e) => setNewLengthInput(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (e.key === "Enter" && newLengthInput.trim()) {
+                          e.preventDefault();
+                          await addLength(newLengthInput);
+                          setNewLengthInput("");
+                        }
+                      }}
+                      placeholder="Add new length (e.g. XXL, Short-Med)..."
+                      className="flex-1 bg-white border border-neutral-200 rounded-xl px-3.5 py-2 text-xs font-medium focus:outline-none focus:border-pink-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!newLengthInput.trim()) return;
+                        await addLength(newLengthInput);
+                        setNewLengthInput("");
+                      }}
+                      className="px-4 py-2 rounded-xl bg-black hover:bg-[#FF5C9D] text-white text-xs font-bold transition cursor-pointer"
+                    >
+                      + Add Length
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* LOYALTY CLUB & CLIENT MILESTONE REWARDS MANAGER */}
+            <div className="mt-10 bg-white rounded-3xl p-6 sm:p-8 border border-pink-200 shadow-sm">
+              <div className="mb-6">
+                <span className="text-xs font-bold text-[#FF5C9D] uppercase tracking-widest block mb-1">
+                  Customisable Stamp Rewards
+                </span>
+                <h3 className="text-xl sm:text-2xl font-black text-neutral-900 tracking-tight">
+                  🎁 Loyalty Milestones & Per-Client Rewards
+                </h3>
+                <p className="text-xs sm:text-sm text-neutral-500 mt-1">
+                  Set the studio&apos;s default 5-order reward (e.g. &ldquo;Free Delivery&rdquo; or &ldquo;Free Application Pack&rdquo;), or customise future milestone gifts for a specific client (e.g. 5th Order = Free Delivery, 10th Order = Free Sizing Kit for a Friend).
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Global Default Reward */}
+                <div className="lg:col-span-5 bg-neutral-50 rounded-2xl p-5 border border-neutral-200 flex flex-col justify-between">
+                  <div>
+                    <h4 className="font-bold text-sm uppercase tracking-wider text-neutral-800 mb-2">
+                      Studio Alternating Default Rewards
+                    </h4>
+                    <p className="text-xs text-neutral-500 mb-4 leading-relaxed">
+                      Odd milestones (5th, 15th, 25th...) default to Reward 1. Even milestones (10th, 20th, 30th...) default to Reward 2 unless customized for that specific client.
+                    </p>
+                    
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-500 mb-1">
+                      5th, 15th, 25th Order Default
+                    </label>
+                    <input
+                      type="text"
+                      value={defaultLoyaltyReward}
+                      onChange={(e) => setDefaultLoyaltyReward(e.target.value)}
+                      placeholder="e.g. Free Delivery"
+                      className="w-full bg-white border border-neutral-200 rounded-xl px-3.5 py-2 text-sm font-bold text-neutral-900 focus:outline-none focus:border-pink-500 mb-3"
+                    />
+
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-500 mb-1">
+                      10th, 20th, 30th Order Default
+                    </label>
+                    <input
+                      type="text"
+                      value={secondaryLoyaltyReward}
+                      onChange={(e) => setSecondaryLoyaltyReward(e.target.value)}
+                      placeholder="e.g. Free Gift"
+                      className="w-full bg-white border border-neutral-200 rounded-xl px-3.5 py-2 text-sm font-bold text-neutral-900 focus:outline-none focus:border-pink-500 mb-3"
+                    />
+
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-500 mb-1.5">
+                      Quick-Fill Preset Chips
+                    </label>
+                    <div className="flex flex-wrap gap-1.5 mb-4">
+                      {loyaltyQuickPresets.map((preset) => (
+                        <span
+                          key={preset}
+                          className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-white border border-pink-200 text-pink-600 shadow-2xs"
+                        >
+                          {preset}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSaveDefaultLoyaltyReward}
+                    disabled={savingDefaultLoyalty}
+                    className="w-full py-2.5 px-4 rounded-xl bg-black hover:bg-[#FF5C9D] text-white text-xs font-bold uppercase tracking-wider transition cursor-pointer disabled:opacity-50"
+                  >
+                    {savingDefaultLoyalty
+                      ? "Saving..."
+                      : "Save Studio Default Rewards"}
+                  </button>
+                </div>
+
+                {/* Per-Client Custom Milestone Overrides */}
+                <div className="lg:col-span-7 bg-neutral-50 rounded-2xl p-5 border border-neutral-200">
+                  <h4 className="font-bold text-sm uppercase tracking-wider text-neutral-800 mb-2">
+                    Per-Client Custom Milestone Rewards
+                  </h4>
+                  <p className="text-xs text-neutral-500 mb-4">
+                    Select any client below to customise their 5th, 10th, 15th, 20th, 25th, or 30th order reward. Leave any box blank to use the studio default ({defaultLoyaltyReward || "Free Delivery"}).
+                  </p>
+
+                  {/* Client Search & Selector */}
+                  <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                    <input
+                      type="text"
+                      value={clientSearchQuery}
+                      onChange={(e) => setClientSearchQuery(e.target.value)}
+                      placeholder="Search client by name, @instagram, or email..."
+                      className="flex-1 bg-white border border-neutral-200 rounded-xl px-3.5 py-2 text-xs font-medium focus:outline-none focus:border-pink-500"
+                    />
+                    <select
+                      value={
+                        selectedClientForLoyalty
+                          ? selectedClientForLoyalty.syncId ||
+                            selectedClientForLoyalty.docId
+                          : ""
+                      }
+                      onChange={(e) => {
+                        const found = adminClients.find(
+                          (c) => (c.syncId || c.docId) === e.target.value
+                        );
+                        if (found) handleSelectClientForLoyalty(found);
+                        else setSelectedClientForLoyalty(null);
+                      }}
+                      className="bg-white border border-neutral-200 rounded-xl px-3.5 py-2 text-xs font-bold text-neutral-800 focus:outline-none focus:border-pink-500 sm:max-w-[240px]"
+                    >
+                      <option value="">Select a Client ({adminClients.length})...</option>
+                      {adminClients
+                        .filter((c) => {
+                          if (!clientSearchQuery.trim()) return true;
+                          const q = clientSearchQuery.toLowerCase();
+                          return (
+                            (c.name || "").toLowerCase().includes(q) ||
+                            (c.instagram || "").toLowerCase().includes(q) ||
+                            (c.email || "").toLowerCase().includes(q)
+                          );
+                        })
+                        .map((c) => {
+                          const cid = c.syncId || c.docId;
+                          return (
+                            <option key={cid} value={cid}>
+                              {c.name || "Unnamed"}{" "}
+                              {c.instagram ? `(@${c.instagram})` : ""}
+                            </option>
+                          );
+                        })}
+                    </select>
+                  </div>
+
+                  {selectedClientForLoyalty ? (
+                    <div className="bg-white rounded-2xl p-4 border border-pink-200 space-y-4">
+                      <div className="flex items-center justify-between border-b border-pink-50 pb-2.5">
+                        <div>
+                          <span className="font-black text-sm text-neutral-900">
+                            {selectedClientForLoyalty.name || "Client"}
+                          </span>
+                          {selectedClientForLoyalty.instagram && (
+                            <span className="text-xs text-pink-500 font-bold ml-2">
+                              @{selectedClientForLoyalty.instagram}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setClientMilestonesDraft({})}
+                          className="text-[11px] font-bold text-neutral-400 hover:text-red-500 cursor-pointer"
+                        >
+                          Reset All to Default
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {["5", "10", "15", "20", "25", "30"].map((mKey) => (
+                          <div key={mKey}>
+                            <label className="block text-[10px] font-black uppercase tracking-wider text-pink-600 mb-1">
+                              {mKey}th Order Reward
+                            </label>
+                            <input
+                              type="text"
+                              value={clientMilestonesDraft[mKey] || ""}
+                              onChange={(e) =>
+                                setClientMilestonesDraft((prev) => ({
+                                  ...prev,
+                                  [mKey]: e.target.value,
+                                }))
+                              }
+                              placeholder={`Default (${defaultLoyaltyReward || "Free Delivery"})`}
+                              className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-xs font-semibold text-neutral-900 focus:outline-none focus:border-pink-500 focus:bg-white"
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleSaveClientMilestones}
+                        disabled={savingClientMilestones}
+                        className="w-full py-2.5 px-4 rounded-xl bg-[#FF5C9D] hover:bg-pink-600 text-white text-xs font-bold uppercase tracking-wider transition cursor-pointer disabled:opacity-50 shadow-xs"
+                      >
+                        {savingClientMilestones
+                          ? "Saving Client Milestones..."
+                          : `Save Rewards for ${selectedClientForLoyalty.name || "Client"}`}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 px-4 rounded-2xl border border-dashed border-neutral-300 bg-white/60 text-xs text-neutral-400 font-medium">
+                      Select or search for a client above to view and customize their 5th, 10th, 15th+ order rewards.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </main>
@@ -969,6 +1543,13 @@ export default function AdminDashboard() {
                     setSavingProduct(true);
                     try {
                       await deleteDoc(doc(db, editingProduct.docPath));
+                      const targetSyncId = editingProduct.syncId || editingProduct.id;
+                      if (targetSyncId) {
+                        const existingImgsSnap = await getDocs(
+                          query(collection(db, "users", STORE_OWNER_UID, "set_images"), where("setSyncId", "==", targetSyncId))
+                        );
+                        await Promise.all(existingImgsSnap.docs.map(d => deleteDoc(d.ref)));
+                      }
                       setInventory(prev => prev.filter(p => p.id !== editingProduct.id));
                       setEditingProduct(null);
                     } catch(err) {
@@ -1049,6 +1630,21 @@ export default function AdminDashboard() {
                   }}
                   className="w-full border rounded-xl px-4 py-3 font-mono text-sm bg-neutral-50" 
                 />
+              </div>
+
+              <div className="pt-2 border-t border-neutral-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const prod = editingProduct;
+                    setEditingProduct(null);
+                    setGlobalEditingProduct(prod);
+                  }}
+                  className="w-full py-3 px-4 rounded-xl bg-pink-50 hover:bg-pink-100 text-[#FF5C9D] font-bold text-xs uppercase tracking-widest border border-pink-200 transition flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>📸 Manage Extra Photos ({editingProduct.additionalImages?.length || 0}) & Default Shape/Length</span>
+                  <span>→</span>
+                </button>
               </div>
 
             </div>

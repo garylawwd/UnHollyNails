@@ -30,6 +30,7 @@ import { AdminProvider } from "@/context/AdminContext";
 import { WishlistProvider } from "@/context/WishlistContext";
 import CartDrawer from "@/components/CartDrawer";
 import GlobalProductEditor from "@/components/GlobalProductEditor";
+import CompletedSetCelebrationModal from "@/components/CompletedSetCelebrationModal";
 
 export default function RootLayout({
   children,
@@ -49,6 +50,7 @@ export default function RootLayout({
               </main>
               <GlobalFooter />
               <GlobalProductEditor />
+              <CompletedSetCelebrationModal />
             </CartProvider>
           </WishlistProvider>
         </AdminProvider>

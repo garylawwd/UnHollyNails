@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { getFirestore, collection, getDocs } from "firebase/firestore";
 import { app } from "@/lib/firebase";
+import { VENDOR_UID, formatStorageImageUrl } from "@/lib/constants";
 
 const db = getFirestore(app);
 
@@ -35,16 +36,15 @@ export default function ItemPickerModal({
     const fetchAll = async () => {
       setLoading(true);
       try {
-        const vendorUid = process.env.NEXT_PUBLIC_VENDOR_UID || "CMzpkonBxKeLboaVTUYwDWgiwNG3";
+        const vendorUid = VENDOR_UID;
         const snap = await getDocs(collection(db, "users", vendorUid, "nail_sets"));
         
         let items = snap.docs.map(d => {
           const data = d.data();
-          let primaryImage = data.imagePath || 'https://images.unsplash.com/photo-1519014816548-bf5fe059e98b?auto=format&fit=crop&q=80&w=800';
-          if (primaryImage && !primaryImage.startsWith('http')) {
-            const filename = primaryImage.split('/').pop();
-            primaryImage = filename ? `https://firebasestorage.googleapis.com/v0/b/presson-pro.firebasestorage.app/o/users%2F${vendorUid}%2Fimages%2F${filename}?alt=media` : primaryImage;
-          }
+          const primaryImage = formatStorageImageUrl(
+            data.imagePath || 'https://images.unsplash.com/photo-1519014816548-bf5fe059e98b?auto=format&fit=crop&q=80&w=800',
+            vendorUid
+          );
           return {
             id: d.id,
             name: data.name || 'Unnamed',
