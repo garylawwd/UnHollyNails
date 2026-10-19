@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
@@ -17,9 +17,12 @@ interface CompletedPhoto {
   updatedAt?: number;
 }
 
+const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
+
 export default function CompletedSetCelebrationModal() {
   const [activePhoto, setActivePhoto] = useState<CompletedPhoto | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const allPhotosRef = useRef<CompletedPhoto[]>([]);
 
   useEffect(() => {
     let unsubImages: (() => void) | null = null;
@@ -80,11 +83,24 @@ export default function CompletedSetCelebrationModal() {
                 (a.updatedAt || a.orderDate || 0)
             );
 
+            allPhotosRef.current = completedPhotos;
+
             const newest = completedPhotos[0];
             const storageKey = `unholly_celebration_seen_${newest.syncId || newest.docId}`;
+            const photoTimestamp = newest.updatedAt || newest.orderDate || 0;
+            const isRecent = photoTimestamp > 0 && Date.now() - photoTimestamp < FOURTEEN_DAYS_MS;
 
             // Check if client has already seen this specific completed set photo
             if (typeof window !== "undefined") {
+              // If the newest photo was completed more than 14 days ago, silently auto-mark
+              // all historical photos as acknowledged so older orders never pop up.
+              if (!isRecent) {
+                completedPhotos.forEach((photo) => {
+                  localStorage.setItem(`unholly_celebration_seen_${photo.syncId || photo.docId}`, "true");
+                });
+                return;
+              }
+
               const alreadySeen = localStorage.getItem(storageKey);
               if (!alreadySeen) {
                 setActivePhoto(newest);
@@ -110,9 +126,12 @@ export default function CompletedSetCelebrationModal() {
   }, []);
 
   const handleDismiss = () => {
-    if (activePhoto && typeof window !== "undefined") {
-      const storageKey = `unholly_celebration_seen_${activePhoto.syncId || activePhoto.docId}`;
-      localStorage.setItem(storageKey, "true");
+    if (typeof window !== "undefined") {
+      // Mark ALL currently loaded completed photos as seen so user is never prompted for older orders
+      allPhotosRef.current.forEach((photo) => {
+        const key = `unholly_celebration_seen_${photo.syncId || photo.docId}`;
+        localStorage.setItem(key, "true");
+      });
     }
     setIsOpen(false);
   };
