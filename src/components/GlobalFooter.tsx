@@ -27,10 +27,10 @@ export default function GlobalFooter() {
             </h3>
             <ul className="space-y-3 font-brand text-xs sm:text-sm text-center w-full">
               <li><Link href="/collections/all" className="text-neutral-500 hover:text-[#FF5C9D] transition-colors">All Press-On Designs</Link></li>
-              <li><Link href="/menu" className="text-neutral-500 hover:text-[#FF5C9D] transition-colors font-medium">Price Menu & Services</Link></li>
-              <li><Link href="/bundles" className="text-neutral-500 hover:text-[#FF5C9D] transition-colors font-medium">UnHollyNails Bundles</Link></li>
-              <li><Link href="/mystery-boxes" className="text-neutral-500 hover:text-[#FF5C9D] transition-colors font-medium">Mystery Boxes</Link></li>
-              <li><Link href="/club" className="text-neutral-500 hover:text-[#FF5C9D] transition-colors font-medium">UnHollyNails Club</Link></li>
+              <li><Link href="/menu" className="text-neutral-500 hover:text-[#FF5C9D] transition-colors">Price Menu & Services</Link></li>
+              <li><Link href="/bundles" className="text-neutral-500 hover:text-[#FF5C9D] transition-colors">UnHollyNails Bundles</Link></li>
+              <li><Link href="/mystery-boxes" className="text-neutral-500 hover:text-[#FF5C9D] transition-colors">Mystery Boxes</Link></li>
+              <li><Link href="/club" className="text-neutral-500 hover:text-[#FF5C9D] transition-colors">UnHollyNails Club</Link></li>
             </ul>
           </div>
 
@@ -40,8 +40,8 @@ export default function GlobalFooter() {
               Guides & Policies
             </h3>
             <ul className="space-y-3 font-brand text-xs sm:text-sm text-center w-full">
-              <li><Link href="/guides" className="text-neutral-500 hover:text-[#FF5C9D] transition-colors font-medium">Sizing & Application Guide</Link></li>
-              <li><Link href="/policies" className="text-neutral-500 hover:text-[#FF5C9D] transition-colors font-medium">Store Policies (Shipping & Returns)</Link></li>
+              <li><Link href="/guides" className="text-neutral-500 hover:text-[#FF5C9D] transition-colors">Sizing & Application Guide</Link></li>
+              <li><Link href="/policies" className="text-neutral-500 hover:text-[#FF5C9D] transition-colors">Store Policies (Shipping & Returns)</Link></li>
               <li><Link href="/about" className="text-neutral-500 hover:text-[#FF5C9D] transition-colors">About The Studio</Link></li>
               <li><Link href="/contact" className="text-neutral-500 hover:text-[#FF5C9D] transition-colors">Order via DM / Contact</Link></li>
             </ul>
