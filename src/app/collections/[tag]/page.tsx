@@ -4,9 +4,9 @@ import { useEffect, useState, useMemo, useRef, useCallback, Suspense } from "rea
 import Image from "next/image";
 import Link from "next/link";
 import { Dancing_Script } from "next/font/google";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { initializeApp, getApps } from "firebase/app";
-import { getFirestore, collection, getDocs, query, where, collectionGroup, getDoc, doc, setDoc } from "firebase/firestore";
+import { getFirestore, collection, getDocs, query, where, collectionGroup, getDoc, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { getAuth, onAuthStateChanged, User } from "firebase/auth";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -47,10 +47,19 @@ import ProductDetailDrawer from "@/components/ProductDetailDrawer";
 
 function CollectionPageContent() {
   const params = useParams();
+  const router = useRouter();
   const searchParams = useSearchParams();
   // Ensure we safely handle array params or string params
   const rawTag = Array.isArray(params?.tag) ? params.tag[0] : params?.tag;
   const tag = rawTag ? decodeURIComponent(rawTag) : "";
+  const isCoreTag = ['sets', 'minis', 'keychains', 'earrings', 'accessories', 'basics', 'special-offers', 'all'].includes(tag.toLowerCase());
+  const canonicalTag = isCoreTag ? tag.toLowerCase() : tag;
+
+  useEffect(() => {
+    if (tag && isCoreTag && tag !== canonicalTag) {
+      router.replace(`/collections/${canonicalTag}`);
+    }
+  }, [tag, isCoreTag, canonicalTag, router]);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [collectionInfo, setCollectionInfo] = useState<{ title: string; description: string; backgroundImageUrl: string; headerColor?: string; descriptionColor?: string; ombreStart?: string; ombreEnd?: string; bgScale?: number; inRibbon?: boolean; tag?: string; includedProductIds?: string[]; itemOrder?: string[]; themeMode?: 'auto' | 'light' | 'dark' } | null>(null);
@@ -235,9 +244,9 @@ function CollectionPageContent() {
   }, [loading, targetProduct, smoothScrollToTarget]);
 
   useEffect(() => {
-    if (!tag) return;
+    if (!canonicalTag) return;
     fetchCollectionData();
-  }, [tag]);
+  }, [canonicalTag]);
 
   const fetchCollectionData = async () => {
     try {
@@ -246,20 +255,34 @@ function CollectionPageContent() {
       let currentSettings: any = null;
 
       // 1. Fetch Collection Info
-      const settingsRef = doc(db, "users", vendorUid, "collection_settings", tag);
+      const settingsRef = doc(db, "users", vendorUid, "collection_settings", canonicalTag);
       const settingsSnap = await getDoc(settingsRef);
+      let fetchedSettings: any = null;
       if (settingsSnap.exists()) {
-        currentSettings = settingsSnap.data();
+        fetchedSettings = settingsSnap.data();
+      }
+
+      // If canonical doc didn't exist or had no background image, also check non-canonical tag (e.g. capitalized 'Accessories')
+      if ((!fetchedSettings || !fetchedSettings.backgroundImageUrl) && tag !== canonicalTag) {
+        const altRef = doc(db, "users", vendorUid, "collection_settings", tag);
+        const altSnap = await getDoc(altRef);
+        if (altSnap.exists()) {
+          fetchedSettings = { ...altSnap.data(), ...(fetchedSettings || {}) };
+        }
+      }
+
+      if (fetchedSettings) {
+        currentSettings = { ...fetchedSettings, tag: canonicalTag };
         setCollectionInfo(currentSettings);
       } else {
         // Fallback default info if no custom splashback is set
-        let fallbackTitle = tag.charAt(0).toUpperCase() + tag.slice(1).replace(/-/g, " ");
-        let fallbackDesc = `Explore the gorgeous ${tag.replace(/-/g, " ")} collection.`;
+        let fallbackTitle = canonicalTag.charAt(0).toUpperCase() + canonicalTag.slice(1).replace(/-/g, " ");
+        let fallbackDesc = `Explore the gorgeous ${canonicalTag.replace(/-/g, " ")} collection.`;
         
-        if (tag === "special-offers") {
+        if (canonicalTag === "special-offers") {
           fallbackTitle = "Special Offers";
           fallbackDesc = "Check out the latest deals and promos!";
-        } else if (tag === "all") {
+        } else if (canonicalTag === "all") {
           fallbackTitle = "All Designs";
           fallbackDesc = "Browse my entire collection of handcrafted press-ons.";
         }
@@ -272,7 +295,8 @@ function CollectionPageContent() {
           descriptionColor: "#e5e5e5",
           ombreStart: "#f472b6",
           ombreEnd: "#000000",
-          bgScale: 100
+          bgScale: 100,
+          tag: canonicalTag
         };
         setCollectionInfo(currentSettings);
       }
@@ -464,8 +488,13 @@ function CollectionPageContent() {
         newImageUrl = await getDownloadURL(storageRef);
       }
 
-      const updatedMeta = { ...editData, backgroundImageUrl: newImageUrl || '', tag };
-      await setDoc(doc(db, 'users', vendorUid, 'collection_settings', tag), updatedMeta);
+      const updatedMeta = { ...editData, backgroundImageUrl: newImageUrl || '', tag: canonicalTag };
+      await setDoc(doc(db, 'users', vendorUid, 'collection_settings', canonicalTag), updatedMeta, { merge: true });
+      if (tag !== canonicalTag) {
+        try {
+          await deleteDoc(doc(db, 'users', vendorUid, 'collection_settings', tag));
+        } catch(e) {}
+      }
       setCollectionInfo(updatedMeta);
       setShowEditor(false);
     } catch (err) {
@@ -519,7 +548,7 @@ function CollectionPageContent() {
                   onBlur={async (e) => {
                     if(!adminUser) return;
                     const vendorUid = VENDOR_UID;
-                    await setDoc(doc(db, "users", vendorUid, "collection_settings", tag), { title: e.target.value }, { merge: true });
+                    await setDoc(doc(db, "users", vendorUid, "collection_settings", canonicalTag), { title: e.target.value }, { merge: true });
                   }}
                   className={`relative z-50 pointer-events-auto ${dancingScript.className} text-6xl sm:text-8xl ${isThemeLight ? 'drop-shadow-sm' : 'drop-shadow-2xl'} bg-transparent border-none outline-none text-center hover:ring-2 ring-pink-500 rounded p-2`} 
                   style={{ color: collectionInfo?.headerColor || (isThemeLight ? '#171717' : '#ffffff'), minWidth: '300px' }}
@@ -538,7 +567,7 @@ function CollectionPageContent() {
                     setCollectionInfo((prev: any) => ({...prev, headerColor: e.target.value}));
                     if(!adminUser) return;
                     const vendorUid = VENDOR_UID;
-                    await setDoc(doc(db, "users", vendorUid, "collection_settings", tag), { headerColor: e.target.value }, { merge: true });
+                    await setDoc(doc(db, "users", vendorUid, "collection_settings", canonicalTag), { headerColor: e.target.value }, { merge: true });
                   }} className="w-8 h-8 rounded cursor-pointer border-0 p-0" title="Title Color" />
                 </div>
               )}
@@ -553,7 +582,7 @@ function CollectionPageContent() {
                     onBlur={async (e) => {
                       if(!adminUser) return;
                       const vendorUid = VENDOR_UID;
-                      await setDoc(doc(db, "users", vendorUid, "collection_settings", tag), { description: e.target.value }, { merge: true });
+                      await setDoc(doc(db, "users", vendorUid, "collection_settings", canonicalTag), { description: e.target.value }, { merge: true });
                     }}
                     className={`relative z-50 pointer-events-auto text-lg sm:text-xl font-medium ${isThemeLight ? 'drop-shadow-none' : 'drop-shadow-md'} w-full max-w-2xl bg-transparent border-none outline-none text-center hover:ring-2 ring-pink-500 rounded p-2 resize-none overflow-hidden`}
                     style={{ color: collectionInfo?.descriptionColor || (isThemeLight ? '#4b5563' : '#e5e5e5') }}
@@ -572,7 +601,7 @@ function CollectionPageContent() {
                       setCollectionInfo((prev: any) => ({...prev, descriptionColor: e.target.value}));
                       if(!adminUser) return;
                       const vendorUid = VENDOR_UID;
-                      await setDoc(doc(db, "users", vendorUid, "collection_settings", tag), { descriptionColor: e.target.value }, { merge: true });
+                      await setDoc(doc(db, "users", vendorUid, "collection_settings", canonicalTag), { descriptionColor: e.target.value }, { merge: true });
                     }} className="w-8 h-8 rounded cursor-pointer border-0 p-0" title="Description Color" />
                   </div>
                 )}
@@ -790,12 +819,11 @@ function CollectionPageContent() {
                         const vendorUid = VENDOR_UID;
                         
                         // Save to the appropriate array (includedProductIds for custom collections, itemOrder for core tags)
-                        const isCoreTag = ['sets', 'minis', 'keychains', 'earrings', 'accessories', 'basics', 'special-offers'].includes(tag.toLowerCase()) || tag === 'all';
                         if (!isCoreTag) {
-                          await setDoc(doc(db, "users", vendorUid, "collection_settings", tag), { includedProductIds: newOrder }, { merge: true });
+                          await setDoc(doc(db, "users", vendorUid, "collection_settings", canonicalTag), { includedProductIds: newOrder }, { merge: true });
                           setCollectionInfo((prev: any) => ({...prev, includedProductIds: newOrder}));
                         } else {
-                          await setDoc(doc(db, "users", vendorUid, "collection_settings", tag), { itemOrder: newOrder }, { merge: true });
+                          await setDoc(doc(db, "users", vendorUid, "collection_settings", canonicalTag), { itemOrder: newOrder }, { merge: true });
                           setCollectionInfo((prev: any) => ({...prev, itemOrder: newOrder}));
                         }
                       }
@@ -1127,7 +1155,7 @@ function CollectionPageContent() {
                         setProducts(prev => prev.filter(p => p.id !== itemToRemove.id));
                       } else {
                         const newIds = (collectionInfo?.includedProductIds || []).filter(id => id !== itemToRemove.id);
-                        await setDoc(doc(db, "users", vendorUid, "collection_settings", tag), { includedProductIds: newIds }, { merge: true });
+                        await setDoc(doc(db, "users", vendorUid, "collection_settings", canonicalTag), { includedProductIds: newIds }, { merge: true });
                         setCollectionInfo((prev: any) => ({...prev, includedProductIds: newIds}));
                         setProducts(prev => prev.filter(p => p.id !== itemToRemove.id));
                       }
@@ -1151,7 +1179,7 @@ function CollectionPageContent() {
         <ItemPickerModal 
           isOpen={showItemPicker}
           onClose={() => setShowItemPicker(false)}
-          tag={tag}
+          tag={canonicalTag}
           collectionMode={
             tag.toLowerCase() === 'special-offers' ? 'promo' :
             ['sets', 'minis', 'keychains', 'earrings', 'accessories', 'basics', 'all'].includes(tag.toLowerCase()) ? 'core' : 'custom'
@@ -1182,7 +1210,7 @@ function CollectionPageContent() {
                 }
               } else {
                 // Save custom collection order
-                await setDoc(doc(db, "users", vendorUid, "collection_settings", tag), { includedProductIds: selectedIds }, { merge: true });
+                await setDoc(doc(db, "users", vendorUid, "collection_settings", canonicalTag), { includedProductIds: selectedIds }, { merge: true });
                 setCollectionInfo((prev: any) => ({ ...prev, includedProductIds: selectedIds }));
                 // Ensure they are also marked for sale so they show up!
                 for (const pid of selectedIds) {

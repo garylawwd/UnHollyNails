@@ -19,12 +19,12 @@ const CORE_TAGS = [
   'home', 
   'all', 
   'special-offers', 
-  'Sets', 
-  'Minis', 
-  'Keychains', 
-  'Earrings', 
-  'Accessories', 
-  'Basics',
+  'sets', 
+  'minis', 
+  'keychains', 
+  'earrings', 
+  'accessories', 
+  'basics',
   'menu',
   'bundles',
   'mystery-boxes',
@@ -245,13 +245,25 @@ export default function GlobalHeader() {
       try {
         const vendorUid = VENDOR_UID;
         
-        // Fetch all collection settings
+        // Fetch all collection settings and deduplicate case-insensitively
         const snap = await getDocs(collection(db, "users", vendorUid, "collection_settings"));
-        const collections = snap.docs.map(d => ({
-          tag: d.id,
-          title: d.data().title || d.id,
-          inRibbon: d.data().inRibbon === true
-          })).filter(c => c.tag !== "--ribbon_layout--");
+        const collectionsMap = new Map<string, any>();
+        snap.docs.forEach(d => {
+          if (d.id === "--ribbon_layout--") return;
+          const lower = d.id.toLowerCase();
+          const data = d.data();
+          const existing = collectionsMap.get(lower);
+          // Prefer rich configs that have splashbacks or specific theme settings
+          if (!existing || (!existing.backgroundImageUrl && data.backgroundImageUrl)) {
+            collectionsMap.set(lower, {
+              tag: lower,
+              title: data.title || (lower.charAt(0).toUpperCase() + lower.slice(1)),
+              inRibbon: data.inRibbon === true || existing?.inRibbon === true,
+              ...data,
+            });
+          }
+        });
+        const collections = Array.from(collectionsMap.values());
         setAllCollections(collections);
 
         // Fetch ribbon layout
@@ -275,24 +287,37 @@ export default function GlobalHeader() {
           console.warn("Could not read ribbon_layout (likely Firebase rules), using default order", err);
         }
         
+        const defaultCore = ['home', 'special-offers', 'sets', 'minis', 'keychains', 'earrings', 'accessories', 'basics', 'all'];
+
         if (layoutData && layoutData.order && Array.isArray(layoutData.order) && layoutData.order.length > 0) {
-          const defaultCore = ['home', 'all', 'special-offers', 'Sets', 'Minis', 'Keychains', 'Earrings', 'Accessories', 'Basics'];
-            const validTags = layoutData.order.filter((tag: string) => {
-              const collectionMeta = collections.find(c => c.tag.toLowerCase() === tag.toLowerCase());
-              if (defaultCore.map(t => t.toLowerCase()).includes(tag.toLowerCase())) return true;
-              return !!collectionMeta; // Ignore legacy inRibbon flags, just ensure it exists
-            });
-            setRibbonOrder(validTags);
+          const seen = new Set<string>();
+          const validTags: string[] = [];
+          for (const rawTag of layoutData.order) {
+            const lower = rawTag.toLowerCase();
+            if (seen.has(lower)) continue;
+            const collectionMeta = collections.find(c => c.tag.toLowerCase() === lower);
+            if (defaultCore.includes(lower) || !!collectionMeta) {
+              seen.add(lower);
+              validTags.push(lower);
+            }
+          }
+          setRibbonOrder(validTags);
         } else {
           // Default fallback that INCLUDES custom pages!
-          const defaultCore = ['home', 'special-offers', 'Sets', 'Minis', 'Keychains', 'Earrings', 'Accessories', 'Basics'];
-          const filteredCore = [...defaultCore, 'all'];
-            const customInRibbon = collections.filter(c => c.inRibbon && !defaultCore.includes(c.tag)).map(c => c.tag);
-            setRibbonOrder([...filteredCore, ...customInRibbon]);
+          const customInRibbon = collections
+            .filter(c => c.inRibbon && !defaultCore.includes(c.tag.toLowerCase()))
+            .map(c => c.tag.toLowerCase());
+          const seen = new Set<string>();
+          const initialOrder = [...defaultCore, ...customInRibbon].filter(t => {
+            if (seen.has(t)) return false;
+            seen.add(t);
+            return true;
+          });
+          setRibbonOrder(initialOrder);
         }
       } catch (e) {
         console.error("Fatal error fetching ribbon", e);
-        setRibbonOrder(['home', 'special-offers', 'Sets', 'Minis', 'Keychains', 'Earrings', 'Accessories', 'Basics', 'all']);
+        setRibbonOrder(['home', 'special-offers', 'sets', 'minis', 'keychains', 'earrings', 'accessories', 'basics', 'all']);
       }
     };
     fetchRibbon();
@@ -336,10 +361,10 @@ export default function GlobalHeader() {
 
   const executeHide = async () => {
     if (!showConfirmHide) return;
-    const tagToRemove = showConfirmHide;
+    const tagToRemove = showConfirmHide.toLowerCase();
     setShowConfirmHide(null);
     
-    const newOrder = ribbonOrder.filter(t => t !== tagToRemove);
+    const newOrder = ribbonOrder.filter(t => t.toLowerCase() !== tagToRemove);
     setRibbonOrder(newOrder);
     await saveRibbonOrder(newOrder);
     
@@ -350,22 +375,23 @@ export default function GlobalHeader() {
           if (metaDoc.exists()) {
             await setDoc(doc(db, "users", vendorUid, "collection_settings", tagToRemove), { inRibbon: false }, { merge: true });
           }
-        setAllCollections(prev => prev.map(c => c.tag === tagToRemove ? { ...c, inRibbon: false } : c));
+        setAllCollections(prev => prev.map(c => c.tag.toLowerCase() === tagToRemove ? { ...c, inRibbon: false } : c));
       } catch(err) {}
     }
   };
 
   const handleAddExistingPage = async (tagToAdd: string) => {
     setShowAddMenu(false);
-    if (!ribbonOrder.includes(tagToAdd)) {
-      const newOrder = [...ribbonOrder, tagToAdd];
+    const canonicalTag = tagToAdd.toLowerCase();
+    if (!ribbonOrder.map(t => t.toLowerCase()).includes(canonicalTag)) {
+      const newOrder = [...ribbonOrder, canonicalTag];
       setRibbonOrder(newOrder);
       await saveRibbonOrder(newOrder);
-      if (!CORE_TAGS.includes(tagToAdd)) {
+      if (!CORE_TAGS.includes(canonicalTag)) {
         try {
           const vendorUid = VENDOR_UID;
-          await setDoc(doc(db, "users", vendorUid, "collection_settings", tagToAdd), { inRibbon: true }, { merge: true });
-          setAllCollections(prev => prev.map(c => c.tag === tagToAdd ? { ...c, inRibbon: true } : c));
+          await setDoc(doc(db, "users", vendorUid, "collection_settings", canonicalTag), { inRibbon: true }, { merge: true });
+          setAllCollections(prev => prev.map(c => c.tag.toLowerCase() === canonicalTag ? { ...c, inRibbon: true } : c));
         } catch(err) {}
       }
     }
@@ -391,7 +417,7 @@ export default function GlobalHeader() {
       const newOrder = [...ribbonOrder, tag];
       setRibbonOrder(newOrder);
       await saveRibbonOrder(newOrder);
-      setAllCollections(prev => [...prev, { tag, title, inRibbon: true }]);
+      setAllCollections(prev => [...prev.filter(c => c.tag.toLowerCase() !== tag), { tag, title, inRibbon: true }]);
       router.push(`/collections/${tag}`);
     } catch (e) {
       console.error(e);
@@ -415,29 +441,32 @@ export default function GlobalHeader() {
   const isAdmin = user?.uid ? VALID_ADMINS.includes(user.uid as any) : false;
 
   const getLinkDetails = (tag: string) => {
-    if (tag === 'home') return { title: 'HOME', href: '/' };
-    if (tag === 'all') return { title: 'ALL DESIGNS', href: '/collections/all' };
-    if (tag === 'special-offers') {
-      const custom = allCollections.find(c => c.tag === 'special-offers');
-      return { title: custom?.title || 'SPECIAL OFFERS', href: '/collections/special-offers' };
+    const lower = tag.toLowerCase();
+    if (lower === 'home') return { title: 'HOME', href: '/' };
+    if (lower === 'all') return { title: 'ALL DESIGNS', href: '/collections/all' };
+    if (lower === 'special-offers') {
+      const custom = allCollections.find(c => c.tag.toLowerCase() === 'special-offers');
+      return { title: custom?.title?.toUpperCase() || 'SPECIAL OFFERS', href: '/collections/special-offers' };
     }
-    if (tag === 'menu') return { title: 'PRICE MENU', href: '/menu' };
-    if (tag === 'bundles') return { title: 'BUNDLES', href: '/bundles' };
-    if (tag === 'mystery-boxes') return { title: 'MYSTERY BOXES', href: '/mystery-boxes' };
-    if (tag === 'club') return { title: 'UNHOLLY CLUB', href: '/club' };
-    if (tag === 'guides') return { title: 'SIZING & CARE', href: '/guides' };
-    if (tag === 'policies') return { title: 'POLICIES', href: '/policies' };
-    if (['Sets', 'Minis', 'Keychains', 'Earrings', 'Accessories', 'Basics'].includes(tag)) {
-      return { title: tag.toUpperCase(), href: `/collections/${tag}` };
+    if (lower === 'menu') return { title: 'PRICE MENU', href: '/menu' };
+    if (lower === 'bundles') return { title: 'BUNDLES', href: '/bundles' };
+    if (lower === 'mystery-boxes') return { title: 'MYSTERY BOXES', href: '/mystery-boxes' };
+    if (lower === 'club') return { title: 'UNHOLLY CLUB', href: '/club' };
+    if (lower === 'guides') return { title: 'SIZING & CARE', href: '/guides' };
+    if (lower === 'policies') return { title: 'POLICIES', href: '/policies' };
+    if (['sets', 'minis', 'keychains', 'earrings', 'accessories', 'basics'].includes(lower)) {
+      const custom = allCollections.find(c => c.tag.toLowerCase() === lower);
+      return { title: (custom?.title || lower).toUpperCase(), href: `/collections/${lower}` };
     }
-    const custom = allCollections.find(c => c.tag === tag);
-    if (custom) return { title: custom.title.toUpperCase(), href: `/collections/${tag}` };
+    const custom = allCollections.find(c => c.tag.toLowerCase() === lower);
+    if (custom) return { title: (custom.title || custom.tag).toUpperCase(), href: `/collections/${custom.tag}` };
     return { title: tag.toUpperCase(), href: `/collections/${tag}` };
   };
 
   const coreTags = CORE_TAGS;
-  const hiddenCollections = allCollections.filter(c => !ribbonOrder.includes(c.tag) && !coreTags.map(t=>t.toLowerCase()).includes(c.tag.toLowerCase()));
-  const hiddenCoreTags = coreTags.filter(t => !ribbonOrder.includes(t));
+  const ribbonOrderLower = new Set(ribbonOrder.map(t => t.toLowerCase()));
+  const hiddenCollections = allCollections.filter(c => !ribbonOrderLower.has(c.tag.toLowerCase()) && !coreTags.includes(c.tag.toLowerCase()));
+  const hiddenCoreTags = coreTags.filter(t => !ribbonOrderLower.has(t.toLowerCase()));
 
   return (
     <>

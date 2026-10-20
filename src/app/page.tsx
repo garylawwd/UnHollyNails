@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState, useEffect, useMemo, useRef, KeyboardEvent } from "react";
-import { collectionGroup, collection, getDocs, doc, updateDoc, query, where, getDoc, setDoc } from "firebase/firestore";
+import { collectionGroup, collection, getDocs, doc, updateDoc, query, where, getDoc, setDoc, deleteDoc } from "firebase/firestore";
 import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User } from "firebase/auth";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, auth, storage } from "@/lib/firebase";
@@ -20,6 +20,41 @@ import { VENDOR_UID, VALID_ADMINS, DEFAULT_SHAPES, DEFAULT_LENGTHS, DEFAULT_SIZE
 const SHAPE_OPTIONS = [...DEFAULT_SHAPES, "Other"];
 const SIZE_OPTIONS = [...DEFAULT_SIZES, "Other"];
 const LENGTH_OPTIONS = [...DEFAULT_LENGTHS, "Other"];
+
+function getColorLuminance(hex?: string): number {
+  if (!hex) return 0;
+  const clean = hex.replace("#", "").trim();
+  let r = 0, g = 0, b = 0;
+  if (clean.length === 3) {
+    r = parseInt(clean[0] + clean[0], 16);
+    g = parseInt(clean[1] + clean[1], 16);
+    b = parseInt(clean[2] + clean[2], 16);
+  } else if (clean.length === 6) {
+    r = parseInt(clean.substring(0, 2), 16);
+    g = parseInt(clean.substring(2, 4), 16);
+    b = parseInt(clean.substring(4, 6), 16);
+  } else {
+    return 0;
+  }
+  return (r * 299 + g * 587 + b * 114) / 1000;
+}
+
+function isCollectionCardLight(collection: any): boolean {
+  const custom = !!collection?.customCardColors;
+  // Use card-specific themeMode if custom, else page themeMode
+  const mode = custom ? (collection?.cardThemeMode || 'auto') : (collection?.themeMode || 'auto');
+  if (mode === 'light') return true;
+  if (mode === 'dark') return false;
+  
+  // Use card-specific ombre if custom, else page ombre
+  const start = (custom && collection?.cardOmbreStart) ? collection.cardOmbreStart : (collection?.ombreStart || '#f472b6');
+  const end = (custom && collection?.cardOmbreEnd) ? collection.cardOmbreEnd : (collection?.ombreEnd || '#000000');
+  
+  const startLum = getColorLuminance(start);
+  const endLum = getColorLuminance(end);
+  const avgLum = (startLum + endLum) / 2;
+  return avgLum > 128 || endLum > 160 || startLum > 160;
+}
 
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -80,6 +115,7 @@ export default function Home() {
   const [pickerSlotIndex, setPickerSlotIndex] = useState<number | null>(null);
   const [confirmRemoveSlot, setConfirmRemoveSlot] = useState<number | null>(null);
   const [showEditor, setShowEditor] = useState(false);
+  const [editorTab, setEditorTab] = useState<'card' | 'page' | 'info'>('card');
   const [editData, setEditData] = useState<any>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const bgFileRef = useRef<HTMLInputElement>(null);
@@ -167,12 +203,27 @@ export default function Home() {
         newCardImageUrl = await getDownloadURL(storageRef);
       }
 
-      const updatedMeta = { ...editData, backgroundImageUrl: newImageUrl || '', cardImageUrl: newCardImageUrl || '' };
-      await setDoc(doc(db, 'users', vendorUid, 'collection_settings', editData.tag), updatedMeta, { merge: true });
+      const rawTag = editData.tag;
+      const isCoreTag = ['sets', 'minis', 'keychains', 'earrings', 'accessories', 'basics', 'special-offers', 'all'].includes(rawTag.toLowerCase());
+      const canonicalTag = isCoreTag ? rawTag.toLowerCase() : rawTag;
+
+      const updatedMeta = { 
+        ...editData, 
+        tag: canonicalTag,
+        backgroundImageUrl: newImageUrl || '', 
+        cardImageUrl: newCardImageUrl || '' 
+      };
+      await setDoc(doc(db, 'users', vendorUid, 'collection_settings', canonicalTag), updatedMeta, { merge: true });
+      
+      if (rawTag !== canonicalTag) {
+        try {
+          await deleteDoc(doc(db, 'users', vendorUid, 'collection_settings', rawTag));
+        } catch(e) {}
+      }
       
       // Update UI state immediately
-      setRibbonCollections((prev: any) => prev.map((c: any) => c.tag === editData.tag ? updatedMeta : c));
-      setAllCollections((prev: any) => prev.map((c: any) => c.tag === editData.tag ? updatedMeta : c));
+      setRibbonCollections((prev: any) => prev.map((c: any) => c.tag.toLowerCase() === canonicalTag ? updatedMeta : c));
+      setAllCollections((prev: any) => prev.map((c: any) => c.tag.toLowerCase() === canonicalTag ? updatedMeta : c));
       
       setShowEditor(false);
     } catch (err) {
@@ -199,36 +250,69 @@ export default function Home() {
       }
       
       // Fetch Ribbon Collections
-      
-        const allCollSnap = await getDocs(collection(db, "users", vendorUid, "collection_settings"));
-        setAllCollections(allCollSnap.docs.map(d => ({ tag: d.id, ...d.data() })));
-
-        const ribbonSnap = await getDocs(query(collection(db, "users", vendorUid, "collection_settings"), where("isFeatured", "==", true)));
-      const ribbons = ribbonSnap.docs.map(d => ({ 
-        tag: d.data().tag || d.id, 
-        title: d.data().title || d.id,
-        description: d.data().description || "",
-        backgroundImageUrl: d.data().backgroundImageUrl || "",
-        ombreStart: d.data().ombreStart || "#f472b6",
-        ombreEnd: d.data().ombreEnd || "#000000",
-        bgScale: d.data().bgScale || 100,
-          cardImageUrl: d.data().cardImageUrl || "",
-          cardBgScale: d.data().cardBgScale || d.data().bgScale || 100
-      }));
-      
-        const orderSnap = await getDoc(doc(db, 'users', vendorUid, 'store_settings', 'featured_order'));
-        if (orderSnap.exists() && orderSnap.data().order) {
-          const order = orderSnap.data().order;
-          ribbons.sort((a: any, b: any) => {
-            const idxA = order.indexOf(a.tag);
-            const idxB = order.indexOf(b.tag);
-            if (idxA === -1 && idxB === -1) return 0;
-            if (idxA === -1) return 1;
-            if (idxB === -1) return -1;
-            return idxA - idxB;
+      const allCollSnap = await getDocs(collection(db, "users", vendorUid, "collection_settings"));
+      const collMap = new Map<string, any>();
+      allCollSnap.docs.forEach(d => {
+        if (d.id === '--ribbon_layout--') return;
+        const lower = d.id.toLowerCase();
+        const data = d.data();
+        const existing = collMap.get(lower);
+        if (!existing || (!existing.backgroundImageUrl && data.backgroundImageUrl)) {
+          collMap.set(lower, {
+            tag: lower,
+            title: data.title || (lower.charAt(0).toUpperCase() + lower.slice(1)),
+            ...data,
           });
         }
-        setRibbonCollections(ribbons as any);
+      });
+      setAllCollections(Array.from(collMap.values()));
+
+      const ribbonSnap = await getDocs(query(collection(db, "users", vendorUid, "collection_settings"), where("isFeatured", "==", true)));
+      const ribbonsMap = new Map<string, any>();
+      ribbonSnap.docs.forEach(d => {
+        const data = d.data();
+        const rawTag = data.tag || d.id;
+        const lower = rawTag.toLowerCase();
+        const existing = ribbonsMap.get(lower);
+        if (!existing || (!existing.backgroundImageUrl && data.backgroundImageUrl) || (!existing.cardImageUrl && data.cardImageUrl)) {
+          ribbonsMap.set(lower, {
+            ...data,
+            tag: lower,
+            title: data.title || (lower.charAt(0).toUpperCase() + lower.slice(1)),
+            description: data.description || "",
+            backgroundImageUrl: data.backgroundImageUrl || "",
+            ombreStart: data.ombreStart || "#f472b6",
+            ombreEnd: data.ombreEnd || "#000000",
+            bgScale: data.bgScale || 100,
+            cardImageUrl: data.cardImageUrl || "",
+            cardBgScale: data.cardBgScale || data.bgScale || 100,
+            headerColor: data.headerColor || "",
+            descriptionColor: data.descriptionColor || "",
+            themeMode: data.themeMode || "auto",
+            customCardColors: data.customCardColors || false,
+            cardOmbreStart: data.cardOmbreStart || "",
+            cardOmbreEnd: data.cardOmbreEnd || "",
+            cardHeaderColor: data.cardHeaderColor || "",
+            cardDescriptionColor: data.cardDescriptionColor || "",
+            cardThemeMode: data.cardThemeMode || "auto",
+          });
+        }
+      });
+      const ribbons = Array.from(ribbonsMap.values());
+      
+      const orderSnap = await getDoc(doc(db, 'users', vendorUid, 'store_settings', 'featured_order'));
+      if (orderSnap.exists() && orderSnap.data().order) {
+        const order = orderSnap.data().order.map((t: string) => t.toLowerCase());
+        ribbons.sort((a: any, b: any) => {
+          const idxA = order.indexOf(a.tag.toLowerCase());
+          const idxB = order.indexOf(b.tag.toLowerCase());
+          if (idxA === -1 && idxB === -1) return 0;
+          if (idxA === -1) return 1;
+          if (idxB === -1) return -1;
+          return idxA - idxB;
+        });
+      }
+      setRibbonCollections(ribbons as any);
 
 
       const q = query(collection(db, "users", vendorUid, "nail_sets"), where("isForSale", "==", true));
@@ -759,6 +843,7 @@ export default function Home() {
                       {(ribbonCollections.length > 0 
                         ? ribbonCollections 
                         : allCollections.filter(c => c.tag && c.tag !== '--ribbon_layout--' && c.tag !== 'all').slice(0, 3).map(c => ({
+                            ...c,
                             tag: c.tag,
                             title: c.title || c.tag,
                             description: c.description || "View this collection",
@@ -767,40 +852,89 @@ export default function Home() {
                             ombreEnd: c.ombreEnd || "#000000",
                             bgScale: c.bgScale || 100,
                             cardImageUrl: c.cardImageUrl || "",
-                            cardBgScale: c.cardBgScale || c.bgScale || 100
+                            cardBgScale: c.cardBgScale || c.bgScale || 100,
+                            headerColor: c.headerColor || "",
+                            descriptionColor: c.descriptionColor || "",
+                            themeMode: c.themeMode || "auto",
+                            customCardColors: c.customCardColors || false,
+                            cardOmbreStart: c.cardOmbreStart || "",
+                            cardOmbreEnd: c.cardOmbreEnd || "",
+                            cardHeaderColor: c.cardHeaderColor || "",
+                            cardDescriptionColor: c.cardDescriptionColor || "",
+                            cardThemeMode: c.cardThemeMode || "auto",
                           }))
-                      ).map((collection: any, index: number) => (
-                            <div key={collection.tag} className="relative group">
-                              {editMode && adminUser && (
-                                <div className="absolute top-3 left-3 z-20 flex gap-1">
-                                  <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveRibbon(index, -1); }} className="bg-black text-white p-2 rounded-full hover:bg-neutral-800 shadow-md transition-transform hover:scale-110 disabled:opacity-50" disabled={index === 0} title="Move Left">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
-                                  </button>
-                                  <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveRibbon(index, 1); }} className="bg-black text-white p-2 rounded-full hover:bg-neutral-800 shadow-md transition-transform hover:scale-110 disabled:opacity-50" disabled={index === ribbonCollections.length - 1} title="Move Right">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
-                                  </button>
-                                </div>
-                              )}
-                            <Link href={`/collections/${collection.tag}`} className="relative h-64 sm:h-80 lg:h-96 rounded-2xl sm:rounded-[2rem] overflow-hidden shadow-lg border border-pink-100/50 block transform transition-all duration-500 hover:-translate-y-1.5 hover:shadow-2xl z-0">
-                              <div className="absolute inset-0 bg-neutral-900 transition duration-700 group-hover:scale-105" style={{ background: `linear-gradient(to bottom right, ${collection.ombreStart || '#f472b6'}, ${collection.ombreEnd || '#000000'})` }}>
+                      ).map((collection: any, index: number) => {
+                        const isLight = isCollectionCardLight(collection);
+                        const custom = !!collection.customCardColors;
+                        const cardStart = (custom && collection.cardOmbreStart) ? collection.cardOmbreStart : (collection.ombreStart || '#f472b6');
+                        const cardEnd = (custom && collection.cardOmbreEnd) ? collection.cardOmbreEnd : (collection.ombreEnd || '#000000');
+                        const defaultTitleColor = isLight ? '#171717' : '#ffffff';
+                        const defaultDescColor = isLight ? '#525252' : '#e5e5e5';
+                        const titleColor = (custom && collection.cardHeaderColor) ? collection.cardHeaderColor : (collection.headerColor || defaultTitleColor);
+                        const descColor = (custom && collection.cardDescriptionColor) ? collection.cardDescriptionColor : (collection.descriptionColor || defaultDescColor);
+
+                        return (
+                          <div key={collection.tag} className="relative group">
+                            {editMode && adminUser && (
+                              <div className="absolute top-3 left-3 z-20 flex gap-1">
+                                <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveRibbon(index, -1); }} className="bg-black text-white p-2 rounded-full hover:bg-neutral-800 shadow-md transition-transform hover:scale-110 disabled:opacity-50" disabled={index === 0} title="Move Left">
+                                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+                                </button>
+                                <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveRibbon(index, 1); }} className="bg-black text-white p-2 rounded-full hover:bg-neutral-800 shadow-md transition-transform hover:scale-110 disabled:opacity-50" disabled={index === ribbonCollections.length - 1} title="Move Right">
+                                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+                                </button>
+                              </div>
+                            )}
+                            <Link 
+                              href={`/collections/${collection.tag}`} 
+                              className={`relative h-64 sm:h-80 lg:h-96 rounded-2xl sm:rounded-[2rem] overflow-hidden shadow-lg block transform transition-all duration-500 hover:-translate-y-1.5 hover:shadow-2xl z-0 ${isLight ? 'border border-pink-200/80 shadow-pink-100/40' : 'border border-pink-100/20'}`}
+                            >
+                              <div 
+                                className="absolute inset-0 transition duration-700 group-hover:scale-105" 
+                                style={{ background: `linear-gradient(to bottom right, ${cardStart}, ${cardEnd})` }}
+                              >
                                 {(collection.cardImageUrl || collection.backgroundImageUrl) && (
-                                  <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                                     <div style={{ transform: `scale(${((collection.cardImageUrl ? collection.cardBgScale : collection.bgScale) || 100) / 100})`, width: '100%', height: '100%', position: 'relative' }}>
-                                      <Image src={collection.cardImageUrl || collection.backgroundImageUrl} alt={collection.title || "Background"} fill className="object-contain opacity-60 mix-blend-overlay" />
+                                      <Image 
+                                        src={collection.cardImageUrl || collection.backgroundImageUrl} 
+                                        alt={collection.title || "Background"} 
+                                        fill 
+                                        className={`object-contain transition-opacity ${isLight ? 'opacity-40 mix-blend-multiply' : 'opacity-60 mix-blend-overlay'}`} 
+                                      />
                                     </div>
                                   </div>
                                 )}
                               </div>
-                              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent"></div>
-                              <div className="absolute inset-x-0 bottom-0 p-5 sm:p-8 flex flex-col justify-end h-full z-10">
-                                <span className="text-pink-300 font-brand font-bold text-[10px] tracking-widest uppercase mb-1 drop-shadow-md">Collection</span>
-                                <h3 className="text-2xl sm:text-3xl font-brand font-bold text-white mb-1.5 drop-shadow-lg leading-tight tracking-tight" style={{ color: collection.headerColor || '#ffffff' }}>{collection.title}</h3>
-                                <p className="text-neutral-200 font-brand font-normal line-clamp-2 text-xs sm:text-sm drop-shadow-sm">{collection.description || "View this collection →"}</p>
+
+                              {/* Adaptive Bottom Fade Overlay */}
+                              {isLight ? (
+                                <div className="absolute inset-x-0 bottom-0 h-3/4 bg-gradient-to-t from-white/95 via-white/50 to-transparent pointer-events-none"></div>
+                              ) : (
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent pointer-events-none"></div>
+                              )}
+
+                              <div className="absolute inset-x-0 bottom-0 p-5 sm:p-8 flex flex-col justify-end h-full z-10 pointer-events-none">
+                                <span className={`font-brand font-bold text-[10px] tracking-widest uppercase mb-1 ${isLight ? 'text-pink-600' : 'text-pink-300 drop-shadow-md'}`}>
+                                  Collection
+                                </span>
+                                <h3 
+                                  className={`text-2xl sm:text-3xl font-brand font-bold mb-1.5 leading-tight tracking-tight ${isLight ? 'drop-shadow-none' : 'drop-shadow-lg'}`} 
+                                  style={{ color: titleColor }}
+                                >
+                                  {collection.title}
+                                </h3>
+                                <p 
+                                  className={`font-brand font-normal line-clamp-2 text-xs sm:text-sm ${isLight ? 'drop-shadow-none' : 'drop-shadow-sm'}`} 
+                                  style={{ color: descColor }}
+                                >
+                                  {collection.description || "View this collection →"}
+                                </p>
                               </div>
                             </Link>
                             {editMode && adminUser && (
                               <button
-                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditData({ ...collection }); setShowEditor(true); }}
+                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditData({ ...collection }); setEditorTab('card'); setShowEditor(true); }}
                                 className="absolute top-3 right-3 z-20 bg-black/70 hover:bg-black text-white p-2.5 rounded-full shadow-lg transition-transform hover:scale-110"
                                 title="Edit Collection"
                               >
@@ -808,7 +942,8 @@ export default function Home() {
                               </button>
                             )}
                           </div>
-                        ))}
+                        );
+                      })}
 
                         {editMode && adminUser && (
                           <div 
@@ -1154,10 +1289,11 @@ export default function Home() {
                         key={c.tag}
                         onClick={async () => {
                           const vendorUid = VENDOR_UID;
-                          await setDoc(doc(db, 'users', vendorUid, 'collection_settings', c.tag), { isFeatured: true }, { merge: true });
-                          const updated = { ...c, isFeatured: true };
-                          setRibbonCollections((prev: any) => [...prev, updated]);
-                          setAllCollections((prev: any) => prev.map((item: any) => item.tag === c.tag ? updated : item));
+                          const canonical = ['sets', 'minis', 'keychains', 'earrings', 'accessories', 'basics', 'special-offers', 'all'].includes(c.tag.toLowerCase()) ? c.tag.toLowerCase() : c.tag;
+                          await setDoc(doc(db, 'users', vendorUid, 'collection_settings', canonical), { isFeatured: true }, { merge: true });
+                          const updated = { ...c, tag: canonical, isFeatured: true };
+                          setRibbonCollections((prev: any) => [...prev.filter((item: any) => item.tag.toLowerCase() !== canonical), updated]);
+                          setAllCollections((prev: any) => prev.map((item: any) => item.tag.toLowerCase() === canonical ? updated : item));
                           setShowFeaturePicker(false);
                         }}
                         className="w-full text-left p-4 bg-white border rounded-xl hover:border-pink-300 hover:bg-pink-50 transition-colors flex items-center justify-between group"
@@ -1177,104 +1313,588 @@ export default function Home() {
         )}
 
         {/* Collection Inline Theme Editor Modal */}
-        {showEditor && editData && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowEditor(false)} />
-            <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden text-black animate-slide-up flex flex-col max-h-[90vh]">
-              <div className="bg-white border-b px-6 py-4 flex items-center justify-between z-10 shrink-0">
-                <h2 className="font-brand font-bold text-lg tracking-tight text-neutral-900 uppercase">Edit Theme</h2>
-                <button onClick={() => setShowEditor(false)} className="text-neutral-400 hover:text-black text-2xl font-bold leading-none">&times;</button>
-              </div>
-              <div className="p-6 space-y-6 overflow-y-auto flex-1">
-                
-                {/* Title and Description */}
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Display Title</label>
-                    <input type="text" value={editData.title || ''} onChange={e => setEditData((p: any) => ({ ...p, title: e.target.value }))} className="w-full border-2 border-neutral-200 rounded-xl px-4 py-3 text-sm focus:border-pink-500 focus:outline-none" />
+        {showEditor && editData && (() => {
+          const isEditPageLight = (() => {
+            if (editData.themeMode === 'light') return true;
+            if (editData.themeMode === 'dark') return false;
+            const sLum = getColorLuminance(editData.ombreStart || '#f472b6');
+            const eLum = getColorLuminance(editData.ombreEnd || '#000000');
+            return ((sLum + eLum) / 2) > 128 || sLum > 160 || eLum > 160;
+          })();
+
+          const isEditCardLight = isCollectionCardLight(editData);
+          const editCardCustom = !!editData.customCardColors;
+          const editCardStart = (editCardCustom && editData.cardOmbreStart) ? editData.cardOmbreStart : (editData.ombreStart || '#f472b6');
+          const editCardEnd = (editCardCustom && editData.cardOmbreEnd) ? editData.cardOmbreEnd : (editData.ombreEnd || '#000000');
+          const editCardTitle = (editCardCustom && editData.cardHeaderColor) ? editData.cardHeaderColor : (editData.headerColor || (isEditCardLight ? '#171717' : '#ffffff'));
+          const editCardDesc = (editCardCustom && editData.cardDescriptionColor) ? editData.cardDescriptionColor : (editData.descriptionColor || (isEditCardLight ? '#525252' : '#e5e5e5'));
+
+          return (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowEditor(false)} />
+              <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden text-black animate-slide-up flex flex-col max-h-[90vh]">
+                {/* Header */}
+                <div className="bg-white border-b px-6 py-4 flex items-center justify-between z-10 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-brand font-bold text-lg tracking-tight text-neutral-900 uppercase">Edit Collection</h2>
+                    <span className="text-[10px] font-mono font-bold bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full">{editData.tag}</span>
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Description</label>
-                    <textarea value={editData.description || ''} onChange={e => setEditData((p: any) => ({ ...p, description: e.target.value }))} rows={2} className="w-full border-2 border-neutral-200 rounded-xl px-4 py-3 text-sm focus:border-pink-500 focus:outline-none resize-none" />
-                  </div>
+                  <button onClick={() => setShowEditor(false)} className="text-neutral-400 hover:text-black text-2xl font-bold leading-none">&times;</button>
                 </div>
 
-                {/* Ombre Gradient */}
-                <div>
-                  <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Background Gradient</label>
-                  <div className="flex items-center gap-3 bg-neutral-50 p-4 rounded-2xl border">
-                    <input type="color" value={editData.ombreStart || '#f472b6'} onChange={e => setEditData((p: any) => ({ ...p, ombreStart: e.target.value }))} className="w-10 h-10 rounded cursor-pointer border-0 p-0" />
-                    <div className="flex-1 h-8 rounded-lg shadow-inner" style={{ background: `linear-gradient(to right, ${editData.ombreStart || '#f472b6'}, ${editData.ombreEnd || '#000000'})` }}></div>
-                    <input type="color" value={editData.ombreEnd || '#000000'} onChange={e => setEditData((p: any) => ({ ...p, ombreEnd: e.target.value }))} className="w-10 h-10 rounded cursor-pointer border-0 p-0" />
-                  </div>
-                </div>
-
-                {/* Splashback Image */}
-                <div>
-                  <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Collection Page Splashback</label>
-                  <div className="border-2 border-dashed rounded-2xl p-4 bg-neutral-50 space-y-3">
-                    {editData.backgroundImageUrl && (
-                      <>
-                        <div className="relative w-full h-24 rounded-xl overflow-hidden shadow-sm">
-                          <Image src={editData.backgroundImageUrl} alt="Splashback" fill className="object-cover" />
-                        </div>
-                        <button onClick={(e) => { e.preventDefault(); setEditData((p: any) => ({ ...p, backgroundImageUrl: "" })); if(bgFileRef.current) bgFileRef.current.value = ""; }} className="text-red-500 text-xs font-bold mt-1 block">Remove Image</button>
-                      </>
-                    )}
-                    <input type="file" ref={bgFileRef} accept="image/*" className="text-sm w-full font-medium file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-pink-50 file:text-pink-700 hover:file:bg-pink-100" />
-                    <div>
-                      <label className="block text-xs font-bold text-neutral-500 mb-1">Scale: {editData.bgScale || 100}%</label>
-                      <input type="range" min="10" max="300" value={editData.bgScale || 100} onChange={e => setEditData((p: any) => ({ ...p, bgScale: parseInt(e.target.value) }))} className="w-full accent-pink-500" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Card Image */}
-                <div>
-                  <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Home Page Card Image</label>
-                  <div className="border-2 border-dashed rounded-2xl p-4 bg-neutral-50 space-y-3">
-                    {editData.cardImageUrl && (
-                      <>
-                        <div className="relative w-full h-24 rounded-xl overflow-hidden shadow-sm">
-                          <Image src={editData.cardImageUrl} alt="Card" fill className="object-contain" />
-                        </div>
-                        <button onClick={(e) => { e.preventDefault(); setEditData((p: any) => ({ ...p, cardImageUrl: "" })); if(cardBgFileRef.current) cardBgFileRef.current.value = ""; }} className="text-red-500 text-xs font-bold mt-1 block">Remove Image</button>
-                      </>
-                    )}
-                    <input type="file" ref={cardBgFileRef} accept="image/*" className="text-sm w-full font-medium file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-pink-50 file:text-pink-700 hover:file:bg-pink-100" />
-                    <div>
-                      <label className="block text-xs font-bold text-neutral-500 mb-1">Scale: {editData.cardBgScale || editData.bgScale || 100}%</label>
-                      <input type="range" min="10" max="300" value={editData.cardBgScale || editData.bgScale || 100} onChange={e => setEditData((p: any) => ({ ...p, cardBgScale: parseInt(e.target.value) }))} className="w-full accent-pink-500" />
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Remove from Featured */}
-                <div className="pt-4 border-t border-neutral-100">
+                {/* Tabs */}
+                <div className="flex border-b bg-neutral-50 px-6 gap-2 shrink-0">
                   <button
-                    onClick={async () => {
-                      const vendorUid = VENDOR_UID;
-                      await setDoc(doc(db, 'users', vendorUid, 'collection_settings', editData.tag), { isFeatured: false }, { merge: true });
-                      setRibbonCollections((prev: any) => prev.filter((c: any) => c.tag !== editData.tag));
-                      setAllCollections((prev: any) => prev.map((c: any) => c.tag === editData.tag ? { ...c, isFeatured: false } : c));
-                      setShowEditor(false);
-                    }}
-                    className="w-full py-3 text-red-500 font-bold hover:bg-red-50 rounded-xl transition-colors text-sm"
+                    type="button"
+                    onClick={() => setEditorTab('card')}
+                    className={`py-3 px-3 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
+                      editorTab === 'card'
+                        ? 'border-pink-500 text-pink-600 bg-white -mb-px rounded-t-lg'
+                        : 'border-transparent text-neutral-500 hover:text-neutral-900'
+                    }`}
                   >
-                    Remove from Featured Collections
+                    <span>Featured Card</span>
+                    {editData.customCardColors && (
+                      <span className="w-2 h-2 rounded-full bg-pink-500" title="Custom card colors active" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditorTab('page')}
+                    className={`py-3 px-3 text-xs font-bold border-b-2 transition-all ${
+                      editorTab === 'page'
+                        ? 'border-pink-500 text-pink-600 bg-white -mb-px rounded-t-lg'
+                        : 'border-transparent text-neutral-500 hover:text-neutral-900'
+                    }`}
+                  >
+                    <span>Collection Page Theme</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditorTab('info')}
+                    className={`py-3 px-3 text-xs font-bold border-b-2 transition-all ${
+                      editorTab === 'info'
+                        ? 'border-pink-500 text-pink-600 bg-white -mb-px rounded-t-lg'
+                        : 'border-transparent text-neutral-500 hover:text-neutral-900'
+                    }`}
+                  >
+                    <span>Title & Info</span>
+                  </button>
+                </div>
+
+                {/* Modal Body */}
+                <div className="p-6 space-y-6 overflow-y-auto flex-1">
+                  {editorTab === 'card' && (
+                    <div className="space-y-6">
+                      {/* Live Card Preview */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">Live Card Preview</span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isEditCardLight ? 'bg-amber-100 text-amber-800' : 'bg-neutral-800 text-neutral-200'}`}>
+                            {isEditCardLight ? 'Light Theme Card' : 'Dark Theme Card'}
+                          </span>
+                        </div>
+                        <div 
+                          className={`relative h-44 rounded-2xl overflow-hidden shadow-md flex flex-col justify-end p-5 transition-all ${isEditCardLight ? 'border border-pink-200' : 'border border-neutral-800'}`}
+                          style={{ background: `linear-gradient(to bottom right, ${editCardStart}, ${editCardEnd})` }}
+                        >
+                          {(editData.cardImageUrl || editData.backgroundImageUrl) && (
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                              <div style={{ transform: `scale(${((editData.cardImageUrl ? editData.cardBgScale : editData.bgScale) || 100) / 100})`, width: '100%', height: '100%', position: 'relative' }}>
+                                <Image 
+                                  src={editData.cardImageUrl || editData.backgroundImageUrl} 
+                                  alt="Preview" 
+                                  fill 
+                                  className={`object-contain ${isEditCardLight ? 'opacity-40 mix-blend-multiply' : 'opacity-60 mix-blend-overlay'}`} 
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {isEditCardLight ? (
+                            <div className="absolute inset-x-0 bottom-0 h-3/4 bg-gradient-to-t from-white/95 via-white/50 to-transparent pointer-events-none"></div>
+                          ) : (
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent pointer-events-none"></div>
+                          )}
+
+                          <div className="relative z-10 pointer-events-none">
+                            <span className={`text-[9px] font-bold uppercase tracking-wider block mb-0.5 ${isEditCardLight ? 'text-pink-600' : 'text-pink-300 drop-shadow-md'}`}>
+                              Collection
+                            </span>
+                            <h4 
+                              className={`text-lg font-brand font-bold leading-tight ${isEditCardLight ? 'drop-shadow-none' : 'drop-shadow-lg'}`}
+                              style={{ color: editCardTitle }}
+                            >
+                              {editData.title || 'Collection Title'}
+                            </h4>
+                            <p 
+                              className={`text-xs font-brand line-clamp-1 mt-0.5 ${isEditCardLight ? 'drop-shadow-none' : 'drop-shadow-sm'}`}
+                              style={{ color: editCardDesc }}
+                            >
+                              {editData.description || 'Collection description preview'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Toggle Independent Card Theming */}
+                      <div className="bg-pink-50/60 border border-pink-200/80 rounded-2xl p-4">
+                        <label className="flex items-start gap-3 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={!!editData.customCardColors}
+                            onChange={e => {
+                              const checked = e.target.checked;
+                              setEditData((p: any) => ({
+                                ...p,
+                                customCardColors: checked,
+                                ...(checked && !p.cardOmbreStart ? {
+                                  cardOmbreStart: p.ombreStart || '#f472b6',
+                                  cardOmbreEnd: p.ombreEnd || '#000000',
+                                  cardHeaderColor: p.headerColor || '',
+                                  cardDescriptionColor: p.descriptionColor || '',
+                                  cardThemeMode: p.themeMode || 'auto'
+                                } : {})
+                              }));
+                            }}
+                            className="mt-0.5 w-4 h-4 rounded text-pink-600 focus:ring-pink-500 border-neutral-300 accent-pink-600 cursor-pointer"
+                          />
+                          <div>
+                            <span className="block text-xs font-bold text-neutral-900 uppercase">Customize Featured Card Colors Separately</span>
+                            <span className="block text-[11px] text-neutral-600 mt-0.5">
+                              {editData.customCardColors 
+                                ? 'Card is using separate colors from the collection page.'
+                                : 'Card currently inherits colors directly from the collection page theme.'}
+                            </span>
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* Card Color Controls (Shown when custom is enabled) */}
+                      {editData.customCardColors && (
+                        <div className="space-y-4 pt-1">
+                          {/* Card Presets */}
+                          <div>
+                            <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Card Quick Presets</label>
+                            <div className="grid grid-cols-2 gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setEditData((p: any) => ({
+                                  ...p,
+                                  cardOmbreStart: '#ffffff',
+                                  cardOmbreEnd: '#ffffff',
+                                  cardHeaderColor: '#171717',
+                                  cardDescriptionColor: '#4b5563',
+                                  cardThemeMode: 'light'
+                                }))}
+                                className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
+                              >
+                                <span className="w-5 h-5 rounded-full border border-neutral-300 bg-white inline-block shrink-0 shadow-inner"></span>
+                                <span>Pure White</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditData((p: any) => ({
+                                  ...p,
+                                  cardOmbreStart: '#fce7f3',
+                                  cardOmbreEnd: '#fdf2f8',
+                                  cardHeaderColor: '#171717',
+                                  cardDescriptionColor: '#4b5563',
+                                  cardThemeMode: 'light'
+                                }))}
+                                className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
+                              >
+                                <span className="w-5 h-5 rounded-full border border-pink-200 bg-pink-100 inline-block shrink-0"></span>
+                                <span>Soft Pink</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditData((p: any) => ({
+                                  ...p,
+                                  cardOmbreStart: '#fbcfe8',
+                                  cardOmbreEnd: '#ffffff',
+                                  cardHeaderColor: '#171717',
+                                  cardDescriptionColor: '#4b5563',
+                                  cardThemeMode: 'light'
+                                }))}
+                                className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
+                              >
+                                <span className="w-5 h-5 rounded-full bg-gradient-to-r from-pink-300 to-white inline-block shrink-0 shadow-inner"></span>
+                                <span>Pink to White</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditData((p: any) => ({
+                                  ...p,
+                                  cardOmbreStart: '#f472b6',
+                                  cardOmbreEnd: '#000000',
+                                  cardHeaderColor: '#ffffff',
+                                  cardDescriptionColor: '#e5e5e5',
+                                  cardThemeMode: 'dark'
+                                }))}
+                                className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
+                              >
+                                <span className="w-5 h-5 rounded-full bg-gradient-to-r from-pink-400 to-black inline-block shrink-0"></span>
+                                <span>Unholly Ombre</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditData((p: any) => ({
+                                  ...p,
+                                  cardOmbreStart: '#262626',
+                                  cardOmbreEnd: '#0a0a0a',
+                                  cardHeaderColor: '#ffffff',
+                                  cardDescriptionColor: '#d4d4d4',
+                                  cardThemeMode: 'dark'
+                                }))}
+                                className="col-span-2 flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
+                              >
+                                <span className="w-5 h-5 rounded-full bg-neutral-900 inline-block shrink-0"></span>
+                                <span>Charcoal Luxe</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Card Ombre Inputs */}
+                          <div>
+                            <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Card Ombre Gradient</label>
+                            <div className="flex items-center gap-3 bg-neutral-50 p-3 rounded-2xl border">
+                              <input 
+                                type="color" 
+                                value={editData.cardOmbreStart || editData.ombreStart || '#f472b6'} 
+                                onChange={e => setEditData((p: any) => ({ ...p, cardOmbreStart: e.target.value }))} 
+                                className="w-9 h-9 rounded cursor-pointer border-0 p-0" 
+                              />
+                              <div 
+                                className="flex-1 h-8 rounded-lg shadow-inner" 
+                                style={{ background: `linear-gradient(to right, ${editData.cardOmbreStart || editData.ombreStart || '#f472b6'}, ${editData.cardOmbreEnd || editData.ombreEnd || '#000000'})` }}
+                              />
+                              <input 
+                                type="color" 
+                                value={editData.cardOmbreEnd || editData.ombreEnd || '#000000'} 
+                                onChange={e => setEditData((p: any) => ({ ...p, cardOmbreEnd: e.target.value }))} 
+                                className="w-9 h-9 rounded cursor-pointer border-0 p-0" 
+                              />
+                            </div>
+                          </div>
+
+                          {/* Card Contrast Mode */}
+                          <div>
+                            <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Card Contrast Mode</label>
+                            <div className="grid grid-cols-3 gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setEditData((p: any) => ({ ...p, cardThemeMode: 'auto' }))}
+                                className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${(editData.cardThemeMode || 'auto') === 'auto' ? 'bg-black text-white border-black' : 'bg-white text-neutral-700 border-neutral-200 hover:bg-neutral-50'}`}
+                              >
+                                <span>Auto Detect</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditData((p: any) => ({ ...p, cardThemeMode: 'light' }))}
+                                className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${editData.cardThemeMode === 'light' ? 'bg-black text-white border-black' : 'bg-white text-neutral-700 border-neutral-200 hover:bg-neutral-50'}`}
+                              >
+                                <span>Light Mode</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditData((p: any) => ({ ...p, cardThemeMode: 'dark' }))}
+                                className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${editData.cardThemeMode === 'dark' ? 'bg-black text-white border-black' : 'bg-white text-neutral-700 border-neutral-200 hover:bg-neutral-50'}`}
+                              >
+                                <span>Dark Mode</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Card Title & Desc Colors */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[11px] font-bold text-neutral-500 uppercase mb-1.5">Card Title Color</label>
+                              <div className="flex items-center gap-2 border border-neutral-200 rounded-xl p-2 bg-neutral-50">
+                                <input
+                                  type="color"
+                                  value={editData.cardHeaderColor || (isEditCardLight ? '#171717' : '#ffffff')}
+                                  onChange={e => setEditData((p: any) => ({ ...p, cardHeaderColor: e.target.value }))}
+                                  className="w-7 h-7 rounded cursor-pointer border-0 p-0 bg-transparent shrink-0"
+                                />
+                                <input
+                                  type="text"
+                                  value={editData.cardHeaderColor || (isEditCardLight ? '#171717' : '#ffffff')}
+                                  onChange={e => setEditData((p: any) => ({ ...p, cardHeaderColor: e.target.value }))}
+                                  className="w-full text-xs font-mono font-medium uppercase bg-transparent outline-none"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-bold text-neutral-500 uppercase mb-1.5">Card Desc Color</label>
+                              <div className="flex items-center gap-2 border border-neutral-200 rounded-xl p-2 bg-neutral-50">
+                                <input
+                                  type="color"
+                                  value={editData.cardDescriptionColor || (isEditCardLight ? '#525252' : '#e5e5e5')}
+                                  onChange={e => setEditData((p: any) => ({ ...p, cardDescriptionColor: e.target.value }))}
+                                  className="w-7 h-7 rounded cursor-pointer border-0 p-0 bg-transparent shrink-0"
+                                />
+                                <input
+                                  type="text"
+                                  value={editData.cardDescriptionColor || (isEditCardLight ? '#525252' : '#e5e5e5')}
+                                  onChange={e => setEditData((p: any) => ({ ...p, cardDescriptionColor: e.target.value }))}
+                                  className="w-full text-xs font-mono font-medium uppercase bg-transparent outline-none"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Card Image */}
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Home Page Card Image</label>
+                        <div className="border-2 border-dashed rounded-2xl p-4 bg-neutral-50 space-y-3">
+                          {editData.cardImageUrl && (
+                            <>
+                              <div className="relative w-full h-24 rounded-xl overflow-hidden shadow-sm">
+                                <Image src={editData.cardImageUrl} alt="Card" fill className="object-contain" />
+                              </div>
+                              <button onClick={(e) => { e.preventDefault(); setEditData((p: any) => ({ ...p, cardImageUrl: "" })); if(cardBgFileRef.current) cardBgFileRef.current.value = ""; }} className="text-red-500 text-xs font-bold mt-1 block">Remove Image</button>
+                            </>
+                          )}
+                          <input type="file" ref={cardBgFileRef} accept="image/*" className="text-sm w-full font-medium file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-pink-50 file:text-pink-700 hover:file:bg-pink-100" />
+                          <div>
+                            <label className="block text-xs font-bold text-neutral-500 mb-1">Scale: {editData.cardBgScale || editData.bgScale || 100}%</label>
+                            <input type="range" min="10" max="300" value={editData.cardBgScale || editData.bgScale || 100} onChange={e => setEditData((p: any) => ({ ...p, cardBgScale: parseInt(e.target.value) }))} className="w-full accent-pink-500" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {editorTab === 'page' && (
+                    <div className="space-y-5">
+                      <div className="bg-neutral-50 border rounded-2xl p-3.5 text-xs text-neutral-600">
+                        These theme settings style the dedicated collection page (<span className="font-mono text-neutral-800">/collections/{editData.tag}</span>).
+                      </div>
+
+                      {/* Page Presets */}
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Page Quick Presets</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditData((p: any) => ({
+                              ...p,
+                              ombreStart: '#ffffff',
+                              ombreEnd: '#ffffff',
+                              headerColor: '#171717',
+                              descriptionColor: '#4b5563',
+                              themeMode: 'light'
+                            }))}
+                            className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
+                          >
+                            <span className="w-5 h-5 rounded-full border border-neutral-300 bg-white inline-block shrink-0 shadow-inner"></span>
+                            <span>Pure White</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditData((p: any) => ({
+                              ...p,
+                              ombreStart: '#fce7f3',
+                              ombreEnd: '#fdf2f8',
+                              headerColor: '#171717',
+                              descriptionColor: '#4b5563',
+                              themeMode: 'light'
+                            }))}
+                            className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
+                          >
+                            <span className="w-5 h-5 rounded-full border border-pink-200 bg-pink-100 inline-block shrink-0"></span>
+                            <span>Soft Pink</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditData((p: any) => ({
+                              ...p,
+                              ombreStart: '#fbcfe8',
+                              ombreEnd: '#ffffff',
+                              headerColor: '#171717',
+                              descriptionColor: '#4b5563',
+                              themeMode: 'light'
+                            }))}
+                            className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
+                          >
+                            <span className="w-5 h-5 rounded-full bg-gradient-to-r from-pink-300 to-white inline-block shrink-0 shadow-inner"></span>
+                            <span>Pink to White</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditData((p: any) => ({
+                              ...p,
+                              ombreStart: '#f472b6',
+                              ombreEnd: '#000000',
+                              headerColor: '#ffffff',
+                              descriptionColor: '#e5e5e5',
+                              themeMode: 'dark'
+                            }))}
+                            className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
+                          >
+                            <span className="w-5 h-5 rounded-full bg-gradient-to-r from-pink-400 to-black inline-block shrink-0"></span>
+                            <span>Unholly Ombre</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditData((p: any) => ({
+                              ...p,
+                              ombreStart: '#262626',
+                              ombreEnd: '#0a0a0a',
+                              headerColor: '#ffffff',
+                              descriptionColor: '#d4d4d4',
+                              themeMode: 'dark'
+                            }))}
+                            className="col-span-2 flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
+                          >
+                            <span className="w-5 h-5 rounded-full bg-neutral-900 inline-block shrink-0"></span>
+                            <span>Charcoal Luxe</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Ombre Gradient */}
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Page Background Gradient</label>
+                        <div className="flex items-center gap-3 bg-neutral-50 p-4 rounded-2xl border">
+                          <input type="color" value={editData.ombreStart || '#f472b6'} onChange={e => setEditData((p: any) => ({ ...p, ombreStart: e.target.value }))} className="w-10 h-10 rounded cursor-pointer border-0 p-0" />
+                          <div className="flex-1 h-8 rounded-lg shadow-inner" style={{ background: `linear-gradient(to right, ${editData.ombreStart || '#f472b6'}, ${editData.ombreEnd || '#000000'})` }}></div>
+                          <input type="color" value={editData.ombreEnd || '#000000'} onChange={e => setEditData((p: any) => ({ ...p, ombreEnd: e.target.value }))} className="w-10 h-10 rounded cursor-pointer border-0 p-0" />
+                        </div>
+                      </div>
+
+                      {/* Page Contrast Mode */}
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Page Contrast Mode</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditData((p: any) => ({ ...p, themeMode: 'auto' }))}
+                            className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${(editData.themeMode || 'auto') === 'auto' ? 'bg-black text-white border-black' : 'bg-white text-neutral-700 border-neutral-200 hover:bg-neutral-50'}`}
+                          >
+                            <span>Auto Detect</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditData((p: any) => ({ ...p, themeMode: 'light' }))}
+                            className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${editData.themeMode === 'light' ? 'bg-black text-white border-black' : 'bg-white text-neutral-700 border-neutral-200 hover:bg-neutral-50'}`}
+                          >
+                            <span>Light Mode</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditData((p: any) => ({ ...p, themeMode: 'dark' }))}
+                            className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${editData.themeMode === 'dark' ? 'bg-black text-white border-black' : 'bg-white text-neutral-700 border-neutral-200 hover:bg-neutral-50'}`}
+                          >
+                            <span>Dark Mode</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Page Text Colors */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-bold text-neutral-500 uppercase mb-1.5">Page Header Color</label>
+                          <div className="flex items-center gap-2 border border-neutral-200 rounded-xl p-2 bg-neutral-50">
+                            <input
+                              type="color"
+                              value={editData.headerColor || (isEditPageLight ? '#171717' : '#ffffff')}
+                              onChange={e => setEditData((p: any) => ({ ...p, headerColor: e.target.value }))}
+                              className="w-7 h-7 rounded cursor-pointer border-0 p-0 bg-transparent shrink-0"
+                            />
+                            <input
+                              type="text"
+                              value={editData.headerColor || (isEditPageLight ? '#171717' : '#ffffff')}
+                              onChange={e => setEditData((p: any) => ({ ...p, headerColor: e.target.value }))}
+                              className="w-full text-xs font-mono font-medium uppercase bg-transparent outline-none"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-neutral-500 uppercase mb-1.5">Page Desc Color</label>
+                          <div className="flex items-center gap-2 border border-neutral-200 rounded-xl p-2 bg-neutral-50">
+                            <input
+                              type="color"
+                              value={editData.descriptionColor || (isEditPageLight ? '#525252' : '#e5e5e5')}
+                              onChange={e => setEditData((p: any) => ({ ...p, descriptionColor: e.target.value }))}
+                              className="w-7 h-7 rounded cursor-pointer border-0 p-0 bg-transparent shrink-0"
+                            />
+                            <input
+                              type="text"
+                              value={editData.descriptionColor || (isEditPageLight ? '#525252' : '#e5e5e5')}
+                              onChange={e => setEditData((p: any) => ({ ...p, descriptionColor: e.target.value }))}
+                              className="w-full text-xs font-mono font-medium uppercase bg-transparent outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Splashback Image */}
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Collection Page Splashback</label>
+                        <div className="border-2 border-dashed rounded-2xl p-4 bg-neutral-50 space-y-3">
+                          {editData.backgroundImageUrl && (
+                            <>
+                              <div className="relative w-full h-24 rounded-xl overflow-hidden shadow-sm">
+                                <Image src={editData.backgroundImageUrl} alt="Splashback" fill className="object-cover" />
+                              </div>
+                              <button onClick={(e) => { e.preventDefault(); setEditData((p: any) => ({ ...p, backgroundImageUrl: "" })); if(bgFileRef.current) bgFileRef.current.value = ""; }} className="text-red-500 text-xs font-bold mt-1 block">Remove Image</button>
+                            </>
+                          )}
+                          <input type="file" ref={bgFileRef} accept="image/*" className="text-sm w-full font-medium file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-pink-50 file:text-pink-700 hover:file:bg-pink-100" />
+                          <div>
+                            <label className="block text-xs font-bold text-neutral-500 mb-1">Scale: {editData.bgScale || 100}%</label>
+                            <input type="range" min="10" max="300" value={editData.bgScale || 100} onChange={e => setEditData((p: any) => ({ ...p, bgScale: parseInt(e.target.value) }))} className="w-full accent-pink-500" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {editorTab === 'info' && (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Display Title</label>
+                        <input type="text" value={editData.title || ''} onChange={e => setEditData((p: any) => ({ ...p, title: e.target.value }))} className="w-full border-2 border-neutral-200 rounded-xl px-4 py-3 text-sm focus:border-pink-500 focus:outline-none" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Description</label>
+                        <textarea value={editData.description || ''} onChange={e => setEditData((p: any) => ({ ...p, description: e.target.value }))} rows={2} className="w-full border-2 border-neutral-200 rounded-xl px-4 py-3 text-sm focus:border-pink-500 focus:outline-none resize-none" />
+                      </div>
+
+                      {/* Remove from Featured */}
+                      <div className="pt-4 border-t border-neutral-100">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const vendorUid = VENDOR_UID;
+                            await setDoc(doc(db, 'users', vendorUid, 'collection_settings', editData.tag), { isFeatured: false }, { merge: true });
+                            setRibbonCollections((prev: any) => prev.filter((c: any) => c.tag.toLowerCase() !== editData.tag.toLowerCase()));
+                            setAllCollections((prev: any) => prev.map((c: any) => c.tag.toLowerCase() === editData.tag.toLowerCase() ? { ...c, isFeatured: false } : c));
+                            setShowEditor(false);
+                          }}
+                          className="w-full py-3 text-red-500 font-bold hover:bg-red-50 rounded-xl transition-colors text-sm"
+                        >
+                          Remove from Featured Collections
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Save Button */}
+                <div className="shrink-0 bg-white border-t p-4">
+                  <button onClick={saveInlineEdits} disabled={savingEdit} className="w-full bg-neutral-900 text-white py-3.5 rounded-xl font-brand font-bold text-xs uppercase tracking-wider hover:bg-[#FF5C9D] disabled:opacity-50 transition-colors shadow-md">
+                    {savingEdit ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </div>
-
-              {/* Save Button */}
-              <div className="shrink-0 bg-white border-t p-4">
-                <button onClick={saveInlineEdits} disabled={savingEdit} className="w-full bg-neutral-900 text-white py-3.5 rounded-xl font-brand font-bold text-xs uppercase tracking-wider hover:bg-[#FF5C9D] disabled:opacity-50 transition-colors shadow-md">
-                  {savingEdit ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Product Slot Picker Modal */}
         {pickerSlotIndex !== null && (
