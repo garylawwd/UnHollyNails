@@ -22,22 +22,22 @@ const SHAPE_OPTIONS = [...DEFAULT_SHAPES, "Other"];
 const SIZE_OPTIONS = [...DEFAULT_SIZES, "Other"];
 const LENGTH_OPTIONS = [...DEFAULT_LENGTHS, "Other"];
 
-function isColorLight(hex?: string): boolean {
-  if (!hex) return false;
+function getColorLuminance(hex?: string): number {
+  if (!hex) return 0;
   const clean = hex.replace("#", "").trim();
+  let r = 0, g = 0, b = 0;
   if (clean.length === 3) {
-    const r = parseInt(clean[0] + clean[0], 16);
-    const g = parseInt(clean[1] + clean[1], 16);
-    const b = parseInt(clean[2] + clean[2], 16);
-    return (r * 299 + g * 587 + b * 114) / 1000 > 185;
+    r = parseInt(clean[0] + clean[0], 16);
+    g = parseInt(clean[1] + clean[1], 16);
+    b = parseInt(clean[2] + clean[2], 16);
+  } else if (clean.length === 6) {
+    r = parseInt(clean.substring(0, 2), 16);
+    g = parseInt(clean.substring(2, 4), 16);
+    b = parseInt(clean.substring(4, 6), 16);
+  } else {
+    return 0;
   }
-  if (clean.length === 6) {
-    const r = parseInt(clean.substring(0, 2), 16);
-    const g = parseInt(clean.substring(2, 4), 16);
-    const b = parseInt(clean.substring(4, 6), 16);
-    return (r * 299 + g * 587 + b * 114) / 1000 > 185;
-  }
-  return false;
+  return (r * 299 + g * 587 + b * 114) / 1000;
 }
 
 import ItemPickerModal from "@/components/ItemPickerModal";
@@ -53,7 +53,7 @@ function CollectionPageContent() {
   const tag = rawTag ? decodeURIComponent(rawTag) : "";
 
   const [products, setProducts] = useState<Product[]>([]);
-  const [collectionInfo, setCollectionInfo] = useState<{ title: string; description: string; backgroundImageUrl: string; headerColor?: string; descriptionColor?: string; ombreStart?: string; ombreEnd?: string; bgScale?: number; inRibbon?: boolean; tag?: string; includedProductIds?: string[]; itemOrder?: string[] } | null>(null);
+  const [collectionInfo, setCollectionInfo] = useState<{ title: string; description: string; backgroundImageUrl: string; headerColor?: string; descriptionColor?: string; ombreStart?: string; ombreEnd?: string; bgScale?: number; inRibbon?: boolean; tag?: string; includedProductIds?: string[]; itemOrder?: string[]; themeMode?: 'auto' | 'light' | 'dark' } | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
@@ -64,11 +64,28 @@ function CollectionPageContent() {
   const [itemToRemove, setItemToRemove] = useState<Product | null>(null);
   const [dismissedHighlightId, setDismissedHighlightId] = useState<string | null>(null);
 
+  // Admin inline editing state
+  const [adminUser, setAdminUser] = useState<User | null>(null);
+  const [showEditor, setShowEditor] = useState(false);
+  const [editData, setEditData] = useState<any>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const bgFileRef = useRef<HTMLInputElement>(null);
+
+  // Current active ombre colors (reflects real-time slider edits if editor modal is open)
+  const currentOmbreStart = (showEditor && editData?.ombreStart) || collectionInfo?.ombreStart || '#f472b6';
+  const currentOmbreEnd = (showEditor && editData?.ombreEnd) || collectionInfo?.ombreEnd || '#000000';
+  const currentThemeMode = (showEditor && editData?.themeMode) || collectionInfo?.themeMode || 'auto';
+
   const isThemeLight = useMemo(() => {
-    const startLight = isColorLight(collectionInfo?.ombreStart || '#f472b6');
-    const endLight = isColorLight(collectionInfo?.ombreEnd || '#000000');
-    return startLight && endLight;
-  }, [collectionInfo?.ombreStart, collectionInfo?.ombreEnd]);
+    if (currentThemeMode === 'light') return true;
+    if (currentThemeMode === 'dark') return false;
+    const startLum = getColorLuminance(currentOmbreStart);
+    const endLum = getColorLuminance(currentOmbreEnd);
+    const avgLum = (startLum + endLum) / 2;
+    // Considered light if average luminance is > 128 (standard WCAG midpoint)
+    // or if either end is bright (e.g. pink to white, white to soft pink)
+    return avgLum > 128 || endLum > 160 || startLum > 160;
+  }, [currentOmbreStart, currentOmbreEnd, currentThemeMode]);
 
   // Drawer state
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -89,13 +106,6 @@ function CollectionPageContent() {
   const { editMode, setEditingProduct } = useAdmin();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [clientProfile, setClientProfile] = useState<any>(null);
-
-  // Admin inline editing state
-  const [adminUser, setAdminUser] = useState<User | null>(null);
-  const [showEditor, setShowEditor] = useState(false);
-  const [editData, setEditData] = useState<any>(null);
-  const [savingEdit, setSavingEdit] = useState(false);
-  const bgFileRef = useRef<HTMLInputElement>(null);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -433,7 +443,10 @@ function CollectionPageContent() {
   }, []);
 
   const openInlineEditor = () => {
-    setEditData({ ...collectionInfo });
+    setEditData({
+      ...collectionInfo,
+      themeMode: collectionInfo?.themeMode || 'auto',
+    });
     setShowEditor(true);
   };
 
@@ -464,29 +477,24 @@ function CollectionPageContent() {
   };
 
   return (
-    <div className={`min-h-screen selection:bg-pink-100 relative ${isThemeLight ? 'bg-white text-neutral-900' : 'bg-neutral-900 text-white'}`}>
+    <div className={`min-h-screen selection:bg-pink-100 relative ${isThemeLight ? 'bg-transparent text-neutral-900' : 'bg-transparent text-white'}`}>
       {/* Full Page Background (Gradient + Optional Image Overlay) */}
       <div 
         className="fixed inset-0 z-0 pointer-events-none transition-colors duration-500" 
-        style={{ background: `linear-gradient(to bottom right, ${collectionInfo?.ombreStart || '#f472b6'}, ${collectionInfo?.ombreEnd || '#000000'})` }}
+        style={{ background: `linear-gradient(to bottom right, ${currentOmbreStart}, ${currentOmbreEnd})` }}
       >
         {collectionInfo?.backgroundImageUrl && (
-          <>
-            <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
-              <div style={{ transform: `scale(${(collectionInfo?.bgScale || 100) / 100})`, width: '100%', height: '100%', position: 'relative' }}>
-                <Image 
-                  src={collectionInfo.backgroundImageUrl} 
-                  alt={collectionInfo?.title || "Background"} 
-                  fill 
-                  className={`object-contain ${isThemeLight ? 'opacity-25 mix-blend-multiply' : 'opacity-50 mix-blend-overlay'}`} 
-                  priority 
-                />
-              </div>
+          <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+            <div style={{ transform: `scale(${(collectionInfo?.bgScale || 100) / 100})`, width: '100%', height: '100%', position: 'relative' }}>
+              <Image 
+                src={collectionInfo.backgroundImageUrl} 
+                alt={collectionInfo?.title || "Background"} 
+                fill 
+                className={`object-contain ${isThemeLight ? 'opacity-25 mix-blend-multiply' : 'opacity-40 mix-blend-overlay'}`} 
+                priority 
+              />
             </div>
-            {!isThemeLight && (
-              <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/20 to-black/80"></div>
-            )}
-          </>
+          </div>
         )}
       </div>
 
@@ -938,7 +946,7 @@ function CollectionPageContent() {
                 {/* Quick Presets */}
                 <div className="space-y-1.5">
                   <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider block">Quick Presets</span>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     <button
                       type="button"
                       onClick={() => setEditData((p: any) => ({
@@ -946,7 +954,8 @@ function CollectionPageContent() {
                         ombreStart: '#ffffff',
                         ombreEnd: '#ffffff',
                         headerColor: '#171717',
-                        descriptionColor: '#4b5563'
+                        descriptionColor: '#4b5563',
+                        themeMode: 'light'
                       }))}
                       className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
                     >
@@ -960,7 +969,8 @@ function CollectionPageContent() {
                         ombreStart: '#fdf2f8',
                         ombreEnd: '#fce7f3',
                         headerColor: '#831843',
-                        descriptionColor: '#9d174d'
+                        descriptionColor: '#9d174d',
+                        themeMode: 'light'
                       }))}
                       className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
                     >
@@ -971,10 +981,26 @@ function CollectionPageContent() {
                       type="button"
                       onClick={() => setEditData((p: any) => ({
                         ...p,
+                        ombreStart: '#fbcfe8',
+                        ombreEnd: '#ffffff',
+                        headerColor: '#171717',
+                        descriptionColor: '#4b5563',
+                        themeMode: 'light'
+                      }))}
+                      className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
+                    >
+                      <span className="w-5 h-5 rounded-full bg-gradient-to-r from-pink-300 to-white inline-block shrink-0 shadow-inner"></span>
+                      <span>Pink to White</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditData((p: any) => ({
+                        ...p,
                         ombreStart: '#f472b6',
                         ombreEnd: '#000000',
                         headerColor: '#ffffff',
-                        descriptionColor: '#e5e5e5'
+                        descriptionColor: '#e5e5e5',
+                        themeMode: 'dark'
                       }))}
                       className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
                     >
@@ -988,13 +1014,44 @@ function CollectionPageContent() {
                         ombreStart: '#262626',
                         ombreEnd: '#0a0a0a',
                         headerColor: '#ffffff',
-                        descriptionColor: '#d4d4d4'
+                        descriptionColor: '#d4d4d4',
+                        themeMode: 'dark'
                       }))}
                       className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
                     >
                       <span className="w-5 h-5 rounded-full bg-neutral-900 inline-block shrink-0"></span>
                       <span>Charcoal Luxe</span>
                     </button>
+                  </div>
+                </div>
+
+                {/* Contrast / Text Mode */}
+                <div className="mt-3 pt-3 border-t border-neutral-100">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider">Contrast / Text Mode</span>
+                    <span className="text-[10px] font-bold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-full">
+                      Currently: {isThemeLight ? 'Light Theme (Dark Text)' : 'Dark Theme (White Text)'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[
+                      { id: 'auto', label: '⚡ Auto Detect' },
+                      { id: 'light', label: '☀️ Light Mode' },
+                      { id: 'dark', label: '🌙 Dark Mode' },
+                    ].map((mode) => (
+                      <button
+                        key={mode.id}
+                        type="button"
+                        onClick={() => setEditData((p: any) => ({ ...p, themeMode: mode.id }))}
+                        className={`py-1.5 px-2 rounded-xl text-xs font-bold transition border cursor-pointer ${
+                          (editData?.themeMode || 'auto') === mode.id
+                            ? 'bg-black text-white border-black shadow-sm'
+                            : 'bg-neutral-50 hover:bg-neutral-100 text-neutral-700 border-neutral-200'
+                        }`}
+                      >
+                        {mode.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
