@@ -631,6 +631,12 @@ export default function GlobalHeader() {
                 </div>
 
                 <Link
+                  href="/profile"
+                  className="text-pink-300 hover:text-white transition-colors underline underline-offset-2 text-xs font-bold whitespace-nowrap ml-1"
+                >
+                  Clients & Profiles →
+                </Link>
+                <Link
                   href="/admin"
                   className="text-pink-300 hover:text-white transition-colors underline underline-offset-2 text-xs font-bold whitespace-nowrap ml-1"
                 >
@@ -679,7 +685,7 @@ export default function GlobalHeader() {
                 <button onClick={handleSignIn} className="text-[10px] font-bold text-white bg-black hover:bg-neutral-800 px-4 py-2 rounded-full transition whitespace-nowrap">SIGN IN</button>
               ) : (
                 <>
-                  <Link href="/profile" className={`relative p-2 transition-colors ${isActive('/profile') ? 'text-[#FF5C9D]' : 'text-neutral-700 hover:text-[#FF5C9D]'}`} aria-label="My Profile">
+                  <Link href="/profile" className={`relative p-2 transition-colors ${isActive('/profile') ? 'text-[#FF5C9D]' : 'text-neutral-700 hover:text-[#FF5C9D]'}`} aria-label={isAdmin ? "Client Directory & Profile Management" : "My Profile"} title={isAdmin ? "Client Directory & Profile Management" : "My Profile"}>
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>
                   </Link>
                   <button onClick={handleLogout} className="text-[10px] font-bold text-pink-500 hover:text-pink-700 bg-pink-50 px-3 py-1.5 rounded-full border border-pink-100 transition whitespace-nowrap ml-1">Logout</button>
@@ -1142,7 +1148,7 @@ export default function GlobalHeader() {
                     <div className="w-7 h-7 rounded-full bg-pink-100 text-[#FF5C9D] flex items-center justify-center font-black text-xs">
                       {user.email ? user.email.charAt(0).toUpperCase() : 'U'}
                     </div>
-                    <span className="truncate max-w-[150px]">{user.displayName || user.email || 'My Account'}</span>
+                    <span className="truncate max-w-[150px]">{isAdmin ? 'Clients & Profiles' : (user.displayName || user.email || 'My Account')}</span>
                   </Link>
 
                   <button 

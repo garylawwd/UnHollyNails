@@ -22,6 +22,24 @@ const SHAPE_OPTIONS = [...DEFAULT_SHAPES, "Other"];
 const SIZE_OPTIONS = [...DEFAULT_SIZES, "Other"];
 const LENGTH_OPTIONS = [...DEFAULT_LENGTHS, "Other"];
 
+function isColorLight(hex?: string): boolean {
+  if (!hex) return false;
+  const clean = hex.replace("#", "").trim();
+  if (clean.length === 3) {
+    const r = parseInt(clean[0] + clean[0], 16);
+    const g = parseInt(clean[1] + clean[1], 16);
+    const b = parseInt(clean[2] + clean[2], 16);
+    return (r * 299 + g * 587 + b * 114) / 1000 > 185;
+  }
+  if (clean.length === 6) {
+    const r = parseInt(clean.substring(0, 2), 16);
+    const g = parseInt(clean.substring(2, 4), 16);
+    const b = parseInt(clean.substring(4, 6), 16);
+    return (r * 299 + g * 587 + b * 114) / 1000 > 185;
+  }
+  return false;
+}
+
 import ItemPickerModal from "@/components/ItemPickerModal";
 import ProductLightbox from "@/components/ProductLightbox";
 import ShapeSizingGuideModal from "@/components/ShapeSizingGuideModal";
@@ -45,6 +63,12 @@ function CollectionPageContent() {
   const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
   const [itemToRemove, setItemToRemove] = useState<Product | null>(null);
   const [dismissedHighlightId, setDismissedHighlightId] = useState<string | null>(null);
+
+  const isThemeLight = useMemo(() => {
+    const startLight = isColorLight(collectionInfo?.ombreStart || '#f472b6');
+    const endLight = isColorLight(collectionInfo?.ombreEnd || '#000000');
+    return startLight && endLight;
+  }, [collectionInfo?.ombreStart, collectionInfo?.ombreEnd]);
 
   // Drawer state
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -440,29 +464,33 @@ function CollectionPageContent() {
   };
 
   return (
-    <div className="min-h-screen selection:bg-pink-100 relative bg-neutral-900">
+    <div className={`min-h-screen selection:bg-pink-100 relative ${isThemeLight ? 'bg-white text-neutral-900' : 'bg-neutral-900 text-white'}`}>
       {/* Full Page Background (Gradient + Optional Image Overlay) */}
       <div 
-        className="fixed inset-0 z-0 pointer-events-none" 
+        className="fixed inset-0 z-0 pointer-events-none transition-colors duration-500" 
         style={{ background: `linear-gradient(to bottom right, ${collectionInfo?.ombreStart || '#f472b6'}, ${collectionInfo?.ombreEnd || '#000000'})` }}
       >
         {collectionInfo?.backgroundImageUrl && (
           <>
             <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
               <div style={{ transform: `scale(${(collectionInfo?.bgScale || 100) / 100})`, width: '100%', height: '100%', position: 'relative' }}>
-                <Image src={collectionInfo.backgroundImageUrl} alt={collectionInfo?.title || "Background"} fill className="object-contain opacity-50 mix-blend-overlay" priority />
+                <Image 
+                  src={collectionInfo.backgroundImageUrl} 
+                  alt={collectionInfo?.title || "Background"} 
+                  fill 
+                  className={`object-contain ${isThemeLight ? 'opacity-25 mix-blend-multiply' : 'opacity-50 mix-blend-overlay'}`} 
+                  priority 
+                />
               </div>
             </div>
-            <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/20 to-black/80"></div>
+            {!isThemeLight && (
+              <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/20 to-black/80"></div>
+            )}
           </>
         )}
       </div>
 
       <div className="relative z-10 flex flex-col min-h-screen">
-
-
-
-
         <div className="pt-16 pb-6 sm:pt-28 sm:pb-12 text-center px-4 relative mt-4">
           {adminUser && editMode && (
               <button 
@@ -485,20 +513,20 @@ function CollectionPageContent() {
                     const vendorUid = VENDOR_UID;
                     await setDoc(doc(db, "users", vendorUid, "collection_settings", tag), { title: e.target.value }, { merge: true });
                   }}
-                  className={`relative z-50 pointer-events-auto ${dancingScript.className} text-6xl sm:text-8xl drop-shadow-2xl bg-transparent border-none outline-none text-center hover:ring-2 ring-pink-500 rounded p-2`} 
-                  style={{ color: collectionInfo?.headerColor || "#ffffff", minWidth: '300px' }}
+                  className={`relative z-50 pointer-events-auto ${dancingScript.className} text-6xl sm:text-8xl ${isThemeLight ? 'drop-shadow-sm' : 'drop-shadow-2xl'} bg-transparent border-none outline-none text-center hover:ring-2 ring-pink-500 rounded p-2`} 
+                  style={{ color: collectionInfo?.headerColor || (isThemeLight ? '#171717' : '#ffffff'), minWidth: '300px' }}
                 />
               ) : (
                 <h1 
-                  className={`${dancingScript.className} text-6xl sm:text-8xl drop-shadow-2xl`} 
-                  style={{ color: collectionInfo?.headerColor || "#ffffff" }}
+                  className={`${dancingScript.className} text-6xl sm:text-8xl ${isThemeLight ? 'drop-shadow-sm' : 'drop-shadow-2xl'}`} 
+                  style={{ color: collectionInfo?.headerColor || (isThemeLight ? '#171717' : '#ffffff') }}
                 >
                   {collectionInfo?.title || tag}
                 </h1>
               )}
               {editMode && (
                 <div className="absolute -right-2 sm:-right-14 top-0 sm:top-1/2 sm:-translate-y-1/2 flex items-center justify-center bg-white rounded-full p-2 shadow-xl opacity-100 transition-opacity z-[60]">
-                  <input type="color" value={collectionInfo?.headerColor || '#ffffff'} onChange={async (e) => {
+                  <input type="color" value={collectionInfo?.headerColor || (isThemeLight ? '#171717' : '#ffffff')} onChange={async (e) => {
                     setCollectionInfo((prev: any) => ({...prev, headerColor: e.target.value}));
                     if(!adminUser) return;
                     const vendorUid = VENDOR_UID;
@@ -519,20 +547,20 @@ function CollectionPageContent() {
                       const vendorUid = VENDOR_UID;
                       await setDoc(doc(db, "users", vendorUid, "collection_settings", tag), { description: e.target.value }, { merge: true });
                     }}
-                    className="relative z-50 pointer-events-auto text-lg sm:text-xl font-medium drop-shadow-md w-full max-w-2xl bg-transparent border-none outline-none text-center hover:ring-2 ring-pink-500 rounded p-2 resize-none overflow-hidden"
-                    style={{ color: collectionInfo?.descriptionColor || '#e5e5e5' }}
+                    className={`relative z-50 pointer-events-auto text-lg sm:text-xl font-medium ${isThemeLight ? 'drop-shadow-none' : 'drop-shadow-md'} w-full max-w-2xl bg-transparent border-none outline-none text-center hover:ring-2 ring-pink-500 rounded p-2 resize-none overflow-hidden`}
+                    style={{ color: collectionInfo?.descriptionColor || (isThemeLight ? '#4b5563' : '#e5e5e5') }}
                     rows={2}
                     placeholder="Collection description..."
                   />
                 ) : (
                   <p 
-                    className="text-lg sm:text-xl font-medium drop-shadow-md max-w-2xl text-center"
-                    style={{ color: collectionInfo?.descriptionColor || '#e5e5e5' }}
+                    className={`text-lg sm:text-xl font-medium ${isThemeLight ? 'drop-shadow-none' : 'drop-shadow-md'} max-w-2xl text-center`}
+                    style={{ color: collectionInfo?.descriptionColor || (isThemeLight ? '#4b5563' : '#e5e5e5') }}
                   >{collectionInfo?.description}</p>
                 )}
                 {editMode && (
                   <div className="absolute -right-2 sm:-right-14 top-0 sm:top-1/2 sm:-translate-y-1/2 flex items-center justify-center bg-white rounded-full p-2 shadow-xl opacity-100 transition-opacity z-[60]">
-                    <input type="color" value={collectionInfo?.descriptionColor || '#e5e5e5'} onChange={async (e) => {
+                    <input type="color" value={collectionInfo?.descriptionColor || (isThemeLight ? '#4b5563' : '#e5e5e5')} onChange={async (e) => {
                       setCollectionInfo((prev: any) => ({...prev, descriptionColor: e.target.value}));
                       if(!adminUser) return;
                       const vendorUid = VENDOR_UID;
@@ -555,7 +583,7 @@ function CollectionPageContent() {
                 viewBox="0 0 24 24"
                 strokeWidth={2}
                 stroke="currentColor"
-                className="w-4 h-4 text-white/70 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none ${isThemeLight ? 'text-neutral-500' : 'text-white/70'}`}
               >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
               </svg>
@@ -564,13 +592,17 @@ function CollectionPageContent() {
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="Search in this collection (name, description, tags)..."
-                className="w-full bg-white/15 hover:bg-white/20 focus:bg-white/25 border border-white/25 text-white placeholder:text-white/60 pl-10 pr-9 py-2 rounded-full text-xs sm:text-sm font-bold outline-none backdrop-blur-md transition"
+                className={`w-full pl-10 pr-9 py-2 rounded-full text-xs sm:text-sm font-bold outline-none backdrop-blur-md transition ${
+                  isThemeLight 
+                    ? 'bg-white/90 hover:bg-white focus:bg-white border border-neutral-300 text-neutral-900 placeholder:text-neutral-400 shadow-sm focus:ring-2 focus:ring-pink-500/30' 
+                    : 'bg-white/15 hover:bg-white/20 focus:bg-white/25 border border-white/25 text-white placeholder:text-white/60'
+                }`}
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/70 hover:text-white text-xs font-bold cursor-pointer"
+                  className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold cursor-pointer ${isThemeLight ? 'text-neutral-500 hover:text-black' : 'text-white/70 hover:text-white'}`}
                 >
                   ✕
                 </button>
@@ -579,7 +611,11 @@ function CollectionPageContent() {
 
             <button 
               onClick={() => setShowFilterModal(true)}
-              className="flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 border border-white/20 text-white px-4 py-2 rounded-full text-sm font-bold transition backdrop-blur-md shrink-0 cursor-pointer"
+              className={`flex items-center justify-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition backdrop-blur-md shrink-0 cursor-pointer ${
+                isThemeLight
+                  ? 'bg-white/90 hover:bg-white border border-neutral-300 text-neutral-800 shadow-sm'
+                  : 'bg-white/10 hover:bg-white/20 border border-white/20 text-white'
+              }`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" /></svg>
               Filter & Sort
@@ -893,10 +929,73 @@ function CollectionPageContent() {
               {/* Ombre Gradient */}
               <div>
                 <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Background Gradient</label>
-                <div className="flex items-center gap-3 bg-neutral-50 p-4 rounded-2xl border">
+                <div className="flex items-center gap-3 bg-neutral-50 p-4 rounded-2xl border mb-3">
                   <input type="color" value={editData.ombreStart || '#f472b6'} onChange={e => setEditData((p: any) => ({ ...p, ombreStart: e.target.value }))} className="w-10 h-10 rounded cursor-pointer border-0 p-0" />
                   <div className="flex-1 h-8 rounded-lg shadow-inner" style={{ background: `linear-gradient(to right, ${editData.ombreStart || '#f472b6'}, ${editData.ombreEnd || '#000000'})` }}></div>
                   <input type="color" value={editData.ombreEnd || '#000000'} onChange={e => setEditData((p: any) => ({ ...p, ombreEnd: e.target.value }))} className="w-10 h-10 rounded cursor-pointer border-0 p-0" />
+                </div>
+                
+                {/* Quick Presets */}
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider block">Quick Presets</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditData((p: any) => ({
+                        ...p,
+                        ombreStart: '#ffffff',
+                        ombreEnd: '#ffffff',
+                        headerColor: '#171717',
+                        descriptionColor: '#4b5563'
+                      }))}
+                      className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
+                    >
+                      <span className="w-5 h-5 rounded-full border border-neutral-300 bg-white inline-block shrink-0 shadow-inner"></span>
+                      <span>Pure White</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditData((p: any) => ({
+                        ...p,
+                        ombreStart: '#fdf2f8',
+                        ombreEnd: '#fce7f3',
+                        headerColor: '#831843',
+                        descriptionColor: '#9d174d'
+                      }))}
+                      className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
+                    >
+                      <span className="w-5 h-5 rounded-full border border-pink-200 bg-pink-100 inline-block shrink-0"></span>
+                      <span>Soft Pink</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditData((p: any) => ({
+                        ...p,
+                        ombreStart: '#f472b6',
+                        ombreEnd: '#000000',
+                        headerColor: '#ffffff',
+                        descriptionColor: '#e5e5e5'
+                      }))}
+                      className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
+                    >
+                      <span className="w-5 h-5 rounded-full bg-gradient-to-r from-pink-400 to-black inline-block shrink-0"></span>
+                      <span>Unholly Ombre</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditData((p: any) => ({
+                        ...p,
+                        ombreStart: '#262626',
+                        ombreEnd: '#0a0a0a',
+                        headerColor: '#ffffff',
+                        descriptionColor: '#d4d4d4'
+                      }))}
+                      className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
+                    >
+                      <span className="w-5 h-5 rounded-full bg-neutral-900 inline-block shrink-0"></span>
+                      <span>Charcoal Luxe</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 

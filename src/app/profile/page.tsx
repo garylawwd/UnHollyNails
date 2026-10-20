@@ -131,6 +131,35 @@ function ProfilePageContent() {
   const vendorUid = VENDOR_UID;
   const isAdmin = isAdminUid(user?.uid);
 
+  // Admin Client Directory & Profile Management States
+  const [adminClients, setAdminClients] = useState<any[]>([]);
+  const [adminSearchQuery, setAdminSearchQuery] = useState('');
+  const [adminFilterTab, setAdminFilterTab] = useState<'all' | 'has_orders' | 'has_sizes' | 'unlinked'>('all');
+  const [adminSelectedClientSyncId, setAdminSelectedClientSyncId] = useState<string | null>(() => {
+    return searchParams.get('clientId') || searchParams.get('clientSyncId') || null;
+  });
+  const [viewingOwnProfile, setViewingOwnProfile] = useState<boolean>(() => {
+    return searchParams.get('view') === 'me';
+  });
+  const [adminEditMode, setAdminEditMode] = useState(false);
+  const [isEditingClientModal, setIsEditingClientModal] = useState(false);
+  const [isCreatingClientModal, setIsCreatingClientModal] = useState(false);
+  const [adminClientOrdersMap, setAdminClientOrdersMap] = useState<Record<string, any[]>>({});
+  const [adminClientSizeMap, setAdminClientSizeMap] = useState<Record<string, number>>({});
+  const [adminSavingClient, setAdminSavingClient] = useState(false);
+  const [clientEditFormState, setClientEditFormState] = useState<any>({});
+  const [newClientFormState, setNewClientFormState] = useState<any>({
+    name: '',
+    instagram: '',
+    email: '',
+    phone: '',
+    address: '',
+    defaultShape: 'Almond',
+    defaultLength: 'M',
+    designNotes: '',
+    additionalComments: '',
+  });
+
   // Listen to global default loyalty milestone rewards
   useEffect(() => {
     const refDoc = doc(db, 'users', vendorUid, 'store_settings', 'loyalty_config');
@@ -157,18 +186,67 @@ function ProfilePageContent() {
     return () => unsub();
   }, [vendorUid]);
 
+  // Auth & Admin Directory fetch
   useEffect(() => {
-    let unsubOrders: (() => void) | undefined;
-    let unsubImages: (() => void) | undefined;
-    let unsubClientDoc: (() => void) | undefined;
-
     const unsubAuth = onAuthStateChanged(auth, async (u) => {
       setUser(u);
-      if (unsubOrders) unsubOrders();
-      if (unsubImages) unsubImages();
-      if (unsubClientDoc) unsubClientDoc();
+      if (!u) {
+        setClientProfile(null);
+        setOrders([]);
+        setSizes({});
+        setClientImages([]);
+        setLoading(false);
+        return;
+      }
 
-      if (u) {
+      if (isAdminUid(u.uid)) {
+        try {
+          // 1. Load all client docs for directory
+          const clientsSnap = await getDocs(collection(db, 'users', vendorUid, 'clients'));
+          const loadedClients = clientsSnap.docs
+            .map((d) => ({ docId: d.id, ...d.data() } as any))
+            .filter((c) => !c.isDeleted)
+            .sort((a, b) => (a.name || a.instagram || '').localeCompare(b.name || b.instagram || ''));
+          setAdminClients(loadedClients);
+
+          // 2. Load all orders to compute client stats
+          const allOrdersSnap = await getDocs(collection(db, 'users', vendorUid, 'orders'));
+          const orderMap: Record<string, any[]> = {};
+          allOrdersSnap.forEach((docSnap) => {
+            const o = { docId: docSnap.id, ...docSnap.data() } as any;
+            const cid = o.clientSyncId;
+            if (cid) {
+              if (!orderMap[cid]) orderMap[cid] = [];
+              orderMap[cid].push(o);
+            }
+          });
+          setAdminClientOrdersMap(orderMap);
+
+          // 3. Load all nail sizes count
+          const allSizesSnap = await getDocs(collection(db, 'users', vendorUid, 'nail_sizes'));
+          const sizeCountMap: Record<string, number> = {};
+          allSizesSnap.forEach((docSnap) => {
+            const data = docSnap.data();
+            const cid = data.clientSyncId;
+            if (cid && typeof data.sizeMm === 'number') {
+              sizeCountMap[cid] = (sizeCountMap[cid] || 0) + 1;
+            }
+          });
+          setAdminClientSizeMap(sizeCountMap);
+        } catch (e) {
+          console.error('Failed to load admin directory data:', e);
+        }
+
+        const paramId = searchParams.get('clientId') || searchParams.get('clientSyncId');
+        if (paramId) {
+          setAdminSelectedClientSyncId(paramId);
+        } else if (searchParams.get('view') === 'me') {
+          setViewingOwnProfile(true);
+        } else {
+          setLoading(false);
+        }
+      } else {
+        // Customer profile lookup by email
         try {
           const q = query(
             collection(db, 'users', vendorUid, 'clients'),
@@ -181,111 +259,389 @@ function ProfilePageContent() {
             let needsHeal = false;
             const healData: any = { ...rawData };
             if (typeof healData.id === 'string') {
-              healData.id = 0; // Android requires Int
+              healData.id = 0;
               needsHeal = true;
             }
             if (typeof healData.birthday === 'string' || healData.birthday === 0) {
-              healData.birthday = null; // Android requires Long or null
+              healData.birthday = null;
               needsHeal = true;
             }
             if (needsHeal) {
               await setDoc(docSnap.ref, healData);
             }
-
             const syncId = healData.syncId || docSnap.id;
-            const initialClientData: any = {
-              ...healData,
-              id: 0,
-              syncId,
-            };
-
-            setClientProfile(initialClientData);
-            setEditForm(initialClientData);
-
-            // Real-time listener on client document so custom loyaltyMilestones updates reflect immediately
-            unsubClientDoc = onSnapshot(docSnap.ref, (liveSnap) => {
-              if (liveSnap.exists()) {
-                const liveData = liveSnap.data();
-                const normalized = {
-                  ...liveData,
-                  id: 0,
-                  syncId: liveData.syncId || liveSnap.id,
-                };
-                setClientProfile(normalized);
-              }
-            });
-
-            // Fetch nail sizes
-            const sizeQ = query(
-              collection(db, 'users', vendorUid, 'nail_sizes'),
-              where('clientSyncId', '==', syncId)
-            );
-            const sizeSnap = await getDocs(sizeQ);
-            const loadedSizes: any = {};
-            sizeSnap.forEach((sDoc) => {
-              const data = sDoc.data();
-              if (
-                data.fingerName !== undefined ||
-                typeof data.size === 'string' ||
-                typeof data.fingerIndex !== 'number'
-              ) {
-                deleteDoc(doc(db, 'users', vendorUid, 'nail_sizes', data.syncId || sDoc.id)).catch(
-                  () => {}
-                );
-                return;
-              }
-
-              const key = Object.keys(FINGER_MAP).find(
-                (k) => FINGER_MAP[k] === data.fingerIndex
-              );
-              if (key) {
-                loadedSizes[key] = { syncId: data.syncId, sizeMm: data.sizeMm };
-              }
-            });
-            setSizes(loadedSizes);
-
-            // Real-time listener for client orders
-            const ordersQ = query(
-              collection(db, 'users', vendorUid, 'orders'),
-              where('clientSyncId', '==', syncId)
-            );
-            unsubOrders = onSnapshot(ordersQ, (ordersSnap) => {
-              const loadedOrders: any[] = [];
-              ordersSnap.forEach((oDoc) => {
-                loadedOrders.push({ docId: oDoc.id, ...oDoc.data() });
-              });
-              loadedOrders.sort(
-                (a, b) => (b.orderDate || b.updatedAt || 0) - (a.orderDate || a.updatedAt || 0)
-              );
-              setOrders(loadedOrders);
-            });
-
-            // Real-time listener for client photos (Inspo, Wishlist, Completed)
-            const imgQ = query(
-              collection(db, 'users', vendorUid, 'client_images'),
-              where('clientSyncId', '==', syncId)
-            );
-            unsubImages = onSnapshot(imgQ, (snap) => {
-              const loaded = snap.docs.map((d) => ({ docId: d.id, ...d.data() }));
-              setClientImages(loaded);
-            });
+            setAdminSelectedClientSyncId(syncId);
           } else {
             setNeedsSetup(true);
+            setLoading(false);
           }
         } catch (e) {
-          console.error('Error fetching profile:', e);
+          console.error('Error fetching client profile:', e);
+          setLoading(false);
         }
       }
-      setLoading(false);
+    });
+
+    return () => unsubAuth();
+  }, [vendorUid, searchParams]);
+
+  // Active target sync ID
+  const activeTargetSyncId = useMemo(() => {
+    if (!user) return null;
+    if (isAdminUid(user.uid)) {
+      if (viewingOwnProfile) {
+        const myDoc = adminClients.find(
+          (c) => c.email && c.email.toLowerCase() === user.email?.toLowerCase()
+        );
+        return myDoc?.syncId || null;
+      }
+      return adminSelectedClientSyncId;
+    }
+    return adminSelectedClientSyncId;
+  }, [user, viewingOwnProfile, adminSelectedClientSyncId, adminClients]);
+
+  // Subscriptions for the currently active client profile
+  useEffect(() => {
+    if (!activeTargetSyncId) {
+      if (isAdminUid(user?.uid) && !viewingOwnProfile) {
+        setClientProfile(null);
+        setOrders([]);
+        setSizes({});
+        setClientImages([]);
+        setLoading(false);
+      }
+      return;
+    }
+
+    setLoading(true);
+    let unsubClientDoc: (() => void) | undefined;
+    let unsubOrders: (() => void) | undefined;
+    let unsubImages: (() => void) | undefined;
+
+    // 1. Client doc listener
+    const clientDocRef = doc(db, 'users', vendorUid, 'clients', activeTargetSyncId);
+    unsubClientDoc = onSnapshot(
+      clientDocRef,
+      (snap) => {
+        if (snap.exists()) {
+          const raw = snap.data();
+          const normalized = {
+            ...raw,
+            id: 0,
+            syncId: raw.syncId || snap.id,
+          };
+          setClientProfile(normalized);
+          setEditForm(normalized);
+          setNeedsSetup(false);
+        }
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Error listening to client doc:', err);
+        setLoading(false);
+      }
+    );
+
+    // 2. Client Nail Sizes
+    const sizeQ = query(
+      collection(db, 'users', vendorUid, 'nail_sizes'),
+      where('clientSyncId', '==', activeTargetSyncId)
+    );
+    getDocs(sizeQ)
+      .then((sizeSnap) => {
+        const loadedSizes: any = {};
+        sizeSnap.forEach((sDoc) => {
+          const data = sDoc.data();
+          if (
+            data.fingerName !== undefined ||
+            typeof data.size === 'string' ||
+            typeof data.fingerIndex !== 'number'
+          ) {
+            deleteDoc(doc(db, 'users', vendorUid, 'nail_sizes', data.syncId || sDoc.id)).catch(
+              () => {}
+            );
+            return;
+          }
+
+          const key = Object.keys(FINGER_MAP).find((k) => FINGER_MAP[k] === data.fingerIndex);
+          if (key) {
+            loadedSizes[key] = { syncId: data.syncId, sizeMm: data.sizeMm };
+          }
+        });
+        setSizes(loadedSizes);
+      })
+      .catch(console.error);
+
+    // 3. Client Orders listener
+    const ordersQ = query(
+      collection(db, 'users', vendorUid, 'orders'),
+      where('clientSyncId', '==', activeTargetSyncId)
+    );
+    unsubOrders = onSnapshot(ordersQ, (ordersSnap) => {
+      const loadedOrders: any[] = [];
+      ordersSnap.forEach((oDoc) => {
+        loadedOrders.push({ docId: oDoc.id, ...oDoc.data() });
+      });
+      loadedOrders.sort(
+        (a, b) => (b.orderDate || b.updatedAt || 0) - (a.orderDate || a.updatedAt || 0)
+      );
+      setOrders(loadedOrders);
+    });
+
+    // 4. Client Images listener
+    const imgQ = query(
+      collection(db, 'users', vendorUid, 'client_images'),
+      where('clientSyncId', '==', activeTargetSyncId)
+    );
+    unsubImages = onSnapshot(imgQ, (snap) => {
+      const loaded = snap.docs.map((d) => ({ docId: d.id, ...d.data() }));
+      setClientImages(loaded);
     });
 
     return () => {
-      unsubAuth();
+      if (unsubClientDoc) unsubClientDoc();
       if (unsubOrders) unsubOrders();
       if (unsubImages) unsubImages();
-      if (unsubClientDoc) unsubClientDoc();
     };
-  }, [vendorUid]);
+  }, [activeTargetSyncId, vendorUid, user, viewingOwnProfile]);
+
+  // Clean Instagram handle helper
+  const cleanInstagram = (handle?: string): string => {
+    if (!handle) return '';
+    let cleaned = handle.trim().toLowerCase();
+    cleaned = cleaned.replace(/^@/, '');
+    cleaned = cleaned.replace(/^https?:\/\/(www\.)?instagram\.com\//, '');
+    return cleaned.split('/')[0].split('?')[0].trim();
+  };
+
+  // Admin order status update
+  const handleUpdateOrderStatus = async (group: any, newStatus: string) => {
+    try {
+      for (const item of group.items) {
+        const orderDocRef = doc(db, 'users', vendorUid, 'orders', item.docId || item.syncId);
+        await setDoc(orderDocRef, { status: newStatus, updatedAt: Date.now() }, { merge: true });
+      }
+    } catch (e) {
+      console.error('Failed to update order status:', e);
+      alert('Failed to update order status.');
+    }
+  };
+
+  // Admin loyalty stamp toggle
+  const handleToggleOrderLoyalty = async (group: any) => {
+    try {
+      const nextVal = !group.earnsStamps;
+      for (const item of group.items) {
+        const orderDocRef = doc(db, 'users', vendorUid, 'orders', item.docId || item.syncId);
+        await setDoc(orderDocRef, { isLoyaltyEligible: nextVal, updatedAt: Date.now() }, { merge: true });
+      }
+    } catch (e) {
+      console.error('Failed to toggle order loyalty eligibility:', e);
+    }
+  };
+
+  // Admin finished photo upload
+  const handleUploadCompletedPhoto = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    orderDate?: number
+  ) => {
+    if (!e.target.files || e.target.files.length === 0 || !clientProfile?.syncId) return;
+    const file = e.target.files[0];
+    try {
+      const storageRef = ref(
+        storage,
+        `users/${vendorUid}/client_images/completed_${Date.now()}_${file.name}`
+      );
+      await uploadBytes(storageRef, file);
+      const downloadUrl = await getDownloadURL(storageRef);
+      const syncId = crypto.randomUUID();
+      await setDoc(doc(db, 'users', vendorUid, 'client_images', syncId), {
+        syncId,
+        clientId: 0,
+        clientSyncId: clientProfile.syncId,
+        linkedClientSyncIds: [],
+        uri: downloadUrl,
+        imageType: 'completed',
+        notes: `Completed set for ${clientProfile.name || clientProfile.instagram || 'client'}`,
+        tags: [],
+        isPublic: true,
+        messages: [],
+        orderDate: orderDate || Date.now(),
+        updatedAt: Date.now(),
+      });
+    } catch (err) {
+      console.error('Failed to upload completed photo:', err);
+      alert('Could not upload photo. Please try again.');
+    }
+  };
+
+  // Open Edit Client Modal
+  const openEditClientModal = (targetClient?: any) => {
+    const c = targetClient || clientProfile;
+    if (!c) return;
+    setClientEditFormState({
+      syncId: c.syncId,
+      name: c.name || '',
+      instagram: c.instagram || '',
+      email: c.email || '',
+      phone: c.phone || '',
+      address: c.address || '',
+      defaultShape: c.defaultShape || 'Almond',
+      defaultLength: c.defaultLength || 'M',
+      designNotes: c.designNotes || '',
+      additionalComments: c.additionalComments || '',
+    });
+    setIsEditingClientModal(true);
+  };
+
+  // Save Client Details & Account Linking
+  const handleSaveClientDetails = async () => {
+    const targetSyncId = clientEditFormState.syncId || clientProfile?.syncId;
+    if (!targetSyncId) return;
+    setAdminSavingClient(true);
+    try {
+      const cleanedInsta = cleanInstagram(clientEditFormState.instagram);
+      const cleanedEmail = (clientEditFormState.email || '').trim().toLowerCase();
+
+      // Check for email collision
+      if (cleanedEmail) {
+        const conflict = adminClients.find(
+          (c) =>
+            c.syncId !== targetSyncId &&
+            c.email &&
+            c.email.toLowerCase() === cleanedEmail
+        );
+        if (conflict) {
+          if (
+            !confirm(
+              `Warning: The Google email "${cleanedEmail}" is already linked to client "${conflict.name || conflict.instagram}". Do you still want to reassign it to ${clientEditFormState.name || cleanedInsta}?`
+            )
+          ) {
+            setAdminSavingClient(false);
+            return;
+          }
+        }
+      }
+
+      const existing = adminClients.find((c) => c.syncId === targetSyncId) || clientProfile || {};
+      const updatedData: any = {
+        ...existing,
+        name: clientEditFormState.name.trim(),
+        instagram: cleanedInsta,
+        email: cleanedEmail,
+        phone: (clientEditFormState.phone || '').trim(),
+        address: (clientEditFormState.address || '').trim(),
+        defaultShape: clientEditFormState.defaultShape || 'Almond',
+        defaultLength: clientEditFormState.defaultLength || 'M',
+        designNotes: (clientEditFormState.designNotes || '').trim(),
+        additionalComments: (clientEditFormState.additionalComments || '').trim(),
+        id: 0,
+        birthday: typeof existing.birthday === 'number' ? existing.birthday : null,
+        updatedAt: Date.now(),
+      };
+
+      await setDoc(doc(db, 'users', vendorUid, 'clients', targetSyncId), updatedData, {
+        merge: true,
+      });
+
+      if (clientProfile && clientProfile.syncId === targetSyncId) {
+        setClientProfile(updatedData);
+        setEditForm(updatedData);
+      }
+      setAdminClients((prev) =>
+        prev.map((c) => (c.syncId === targetSyncId ? { ...c, ...updatedData } : c))
+      );
+      setIsEditingClientModal(false);
+    } catch (e) {
+      console.error('Failed to save client details:', e);
+      alert('Failed to save client details.');
+    } finally {
+      setAdminSavingClient(false);
+    }
+  };
+
+  // Create New Client Profile
+  const handleCreateNewClient = async () => {
+    if (!newClientFormState.instagram.trim() && !newClientFormState.name.trim()) {
+      alert('Please enter at least a name or Instagram handle for the client.');
+      return;
+    }
+    setAdminSavingClient(true);
+    try {
+      const syncId = crypto.randomUUID();
+      const cleanedInsta = cleanInstagram(newClientFormState.instagram);
+      const cleanedEmail = (newClientFormState.email || '').trim().toLowerCase();
+
+      const newDoc: any = {
+        syncId,
+        id: 0,
+        name: newClientFormState.name.trim(),
+        instagram: cleanedInsta,
+        email: cleanedEmail,
+        phone: (newClientFormState.phone || '').trim(),
+        address: (newClientFormState.address || '').trim(),
+        defaultShape: newClientFormState.defaultShape || 'Almond',
+        defaultLength: newClientFormState.defaultLength || 'M',
+        designNotes: (newClientFormState.designNotes || '').trim(),
+        additionalComments: (newClientFormState.additionalComments || '').trim(),
+        birthday: null,
+        adminUid: vendorUid,
+        loyaltyMilestones: {},
+        updatedAt: Date.now(),
+      };
+
+      await setDoc(doc(db, 'users', vendorUid, 'clients', syncId), newDoc);
+      setAdminClients((prev) =>
+        [...prev, newDoc].sort((a, b) =>
+          (a.name || a.instagram || '').localeCompare(b.name || b.instagram || '')
+        )
+      );
+      setAdminSelectedClientSyncId(syncId);
+      window.history.replaceState(null, '', `/profile?clientId=${syncId}`);
+      setIsCreatingClientModal(false);
+      setNewClientFormState({
+        name: '',
+        instagram: '',
+        email: '',
+        phone: '',
+        address: '',
+        defaultShape: 'Almond',
+        defaultLength: 'M',
+        designNotes: '',
+        additionalComments: '',
+      });
+    } catch (e) {
+      console.error('Failed to create new client:', e);
+      alert('Failed to create client.');
+    } finally {
+      setAdminSavingClient(false);
+    }
+  };
+
+  // Filtered clients for Directory View
+  const filteredAdminClients = useMemo(() => {
+    let list = [...adminClients];
+    const q = adminSearchQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter((c) => {
+        const name = (c.name || '').toLowerCase();
+        const insta = (c.instagram || '').toLowerCase();
+        const email = (c.email || '').toLowerCase();
+        const phone = (c.phone || '').toLowerCase();
+        return name.includes(q) || insta.includes(q) || email.includes(q) || phone.includes(q);
+      });
+    }
+
+    if (adminFilterTab === 'has_orders') {
+      list = list.filter((c) => (adminClientOrdersMap[c.syncId]?.length || 0) > 0);
+    } else if (adminFilterTab === 'has_sizes') {
+      list = list.filter((c) => (adminClientSizeMap[c.syncId] || 0) > 0);
+    } else if (adminFilterTab === 'unlinked') {
+      list = list.filter((c) => !c.email || !c.email.trim());
+    }
+
+    return list;
+  }, [adminClients, adminSearchQuery, adminFilterTab, adminClientOrdersMap, adminClientSizeMap]);
 
   // Group orders into Transactions by `orderDate` (matching PressOnPro's `orders.groupBy { it.orderDate }`)
   const transactionGroups = useMemo(() => {
@@ -658,18 +1014,18 @@ function ProfilePageContent() {
     );
   }
 
-  if (needsSetup) {
+  if (needsSetup && (!isAdmin || viewingOwnProfile)) {
     return (
       <div className="flex-grow bg-[#FFF5F8] flex flex-col items-center justify-start p-4 pt-12 sm:pt-16 text-black pb-20">
         <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md">
           <div className="text-center mb-6">
             <h1 className={`${dancingScript.className} text-4xl text-pink-500 font-bold mb-2`}>
-              Welcome to the Club!
+              {isAdmin ? 'Admin Profile Setup' : 'Welcome to the Club!'}
             </h1>
             <p className="text-neutral-500 text-sm">
-              Already a member? Enter your Instagram handle below to instantly link your past
-              orders, custom sizes, and delivery details! If you are new, this will create your
-              profile.
+              {isAdmin
+                ? 'You are signed in as an administrator. You can enter your Instagram handle to create a personal profile for yourself, or return to the Client Directory.'
+                : 'Already a member? Enter your Instagram handle below to instantly link your past orders, custom sizes, and delivery details! If you are new, this will create your profile.'}
             </p>
           </div>
 
@@ -713,12 +1069,26 @@ function ProfilePageContent() {
               >
                 Skip for now
               </button>
-              <button
-                onClick={handleLogout}
-                className="text-red-400 text-xs font-bold hover:text-red-600 py-2 cursor-pointer"
-              >
-                Sign Out
-              </button>
+              {isAdmin && viewingOwnProfile ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewingOwnProfile(false);
+                    setAdminSelectedClientSyncId(null);
+                    window.history.replaceState(null, '', '/profile');
+                  }}
+                  className="text-pink-600 text-xs font-bold hover:underline py-2 cursor-pointer"
+                >
+                  ← Client Directory
+                </button>
+              ) : (
+                <button
+                  onClick={handleLogout}
+                  className="text-red-400 text-xs font-bold hover:text-red-600 py-2 cursor-pointer"
+                >
+                  Sign Out
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -731,12 +1101,403 @@ function ProfilePageContent() {
 
   return (
     <div className="min-h-[calc(100vh-120px)] bg-[#FFF5F8] text-black pb-20">
-      <div className="pt-12 pb-2 px-4 text-center">
-        <h1 className="text-2xl font-black text-black">{clientProfile?.name || 'My Profile'}</h1>
-      </div>
+      {/* View 1: Admin Client Directory (when admin has no client selected and is not viewing own profile) */}
+      {isAdmin && !adminSelectedClientSyncId && !viewingOwnProfile ? (
+        <div className="max-w-6xl mx-auto px-4 py-8">
+          {/* Top Header */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl font-black text-neutral-900">Client Directory</h1>
+                <span className="bg-pink-100 text-pink-600 text-xs font-black px-2.5 py-1 rounded-full">
+                  {adminClients.length} Clients
+                </span>
+              </div>
+              <p className="text-sm text-neutral-500 mt-1 max-w-2xl">
+                Select any client to view their custom finger sizes, adjust milestone loyalty rewards, update order statuses, or link Google sign-in accounts.
+              </p>
+            </div>
 
-      {/* Tabs */}
-      <div className="bg-white shadow-sm border-b border-pink-100 flex justify-center gap-8 px-4 py-3 sticky top-[60px] z-30">
+            <div className="flex items-center gap-2.5 self-stretch sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setIsCreatingClientModal(true)}
+                className="flex-1 sm:flex-none bg-black hover:bg-neutral-800 text-white font-bold px-4 py-2.5 rounded-full text-xs transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
+              >
+                <span>+</span>
+                <span>New Client</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewingOwnProfile(true);
+                  setAdminSelectedClientSyncId(null);
+                  window.history.replaceState(null, '', '/profile?view=me');
+                }}
+                className="flex-1 sm:flex-none bg-white hover:bg-pink-50 text-neutral-700 font-bold px-4 py-2.5 rounded-full text-xs transition border border-neutral-200 flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+              >
+                <span>👤</span>
+                <span>My Own Profile</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Search & Filter Bar */}
+          <div className="bg-white rounded-3xl p-4 shadow-sm border border-pink-100/80 mb-6 space-y-3">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                </svg>
+                <input
+                  type="text"
+                  value={adminSearchQuery}
+                  onChange={(e) => setAdminSearchQuery(e.target.value)}
+                  placeholder="Search by name, @instagram, email, or phone..."
+                  className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-neutral-50 border border-neutral-200 text-xs sm:text-sm font-medium focus:outline-none focus:border-pink-500 focus:bg-white transition"
+                />
+                {adminSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setAdminSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700 text-xs font-bold"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                {[
+                  { id: 'all', label: 'All', count: adminClients.length },
+                  {
+                    id: 'has_orders',
+                    label: 'With Orders',
+                    count: adminClients.filter(
+                      (c) => (adminClientOrdersMap[c.syncId]?.length || 0) > 0
+                    ).length,
+                  },
+                  {
+                    id: 'has_sizes',
+                    label: 'Sizes on File',
+                    count: adminClients.filter((c) => (adminClientSizeMap[c.syncId] || 0) > 0)
+                      .length,
+                  },
+                  {
+                    id: 'unlinked',
+                    label: 'Unlinked Google',
+                    count: adminClients.filter((c) => !c.email || !c.email.trim()).length,
+                  },
+                ].map((filter) => (
+                  <button
+                    key={filter.id}
+                    type="button"
+                    onClick={() => setAdminFilterTab(filter.id as any)}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                      adminFilterTab === filter.id
+                        ? 'bg-black text-white shadow-sm'
+                        : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600'
+                    }`}
+                  >
+                    {filter.label} <span className="opacity-70 ml-1">({filter.count})</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Client Cards Grid */}
+          {filteredAdminClients.length === 0 ? (
+            <div className="text-center py-16 px-4 bg-white rounded-3xl border border-pink-100 shadow-sm">
+              <span className="text-4xl block mb-2">🔍</span>
+              <h3 className="font-bold text-neutral-800 text-base mb-1">No clients found</h3>
+              <p className="text-xs text-neutral-500 max-w-sm mx-auto mb-4">
+                No client records matched your search query or filter. Try clearing the search or adding a new client profile.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminSearchQuery('');
+                  setAdminFilterTab('all');
+                }}
+                className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-bold rounded-full transition"
+              >
+                Clear Search & Filters
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredAdminClients.map((c) => {
+                const clientOrders = adminClientOrdersMap[c.syncId] || [];
+                const orderCount = clientOrders.length;
+                const totalSpend = clientOrders.reduce(
+                  (sum, o) => sum + Number(o.price || 0),
+                  0
+                );
+                const sizeCount = adminClientSizeMap[c.syncId] || 0;
+                const initials = c.name
+                  ? c.name
+                      .split(' ')
+                      .map((n: string) => n[0])
+                      .join('')
+                      .slice(0, 2)
+                      .toUpperCase()
+                  : c.instagram
+                  ? c.instagram.slice(0, 2).toUpperCase()
+                  : 'CL';
+
+                return (
+                  <div
+                    key={c.syncId || c.docId}
+                    className="bg-white rounded-3xl p-5 shadow-sm hover:shadow-md border border-pink-100 transition-all flex flex-col justify-between group"
+                  >
+                    <div>
+                      {/* Card Header: Avatar, Name, Instagram */}
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-pink-400 to-pink-600 text-white font-black text-sm flex items-center justify-center shrink-0 shadow-sm">
+                            {initials}
+                          </div>
+                          <div className="min-w-0">
+                            <h2 className="text-base font-black text-neutral-900 truncate">
+                              {c.name || (c.instagram ? `@${c.instagram}` : 'Client Profile')}
+                            </h2>
+                            {c.instagram && (
+                              <span className="text-xs font-bold text-pink-600 block truncate">
+                                @{c.instagram.replace(/^@/, '')}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditClientModal(c);
+                          }}
+                          className="text-neutral-400 hover:text-pink-600 p-1.5 rounded-full hover:bg-pink-50 transition cursor-pointer shrink-0"
+                          title="Edit details & account linking"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                            className="w-4 h-4"
+                          >
+                            <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      {/* Google Account Linking Status */}
+                      <div className="mb-3.5">
+                        {c.email ? (
+                          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2.5 py-1 rounded-xl">
+                            <span className="text-emerald-500 font-black">✓</span>
+                            <span className="truncate">{c.email}</span>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openEditClientModal(c)}
+                            className="w-full flex items-center justify-between text-[11px] font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1 rounded-xl transition cursor-pointer text-left"
+                            title="Click to connect client's Google email"
+                          >
+                            <span className="flex items-center gap-1 truncate">
+                              <span>⚠️</span>
+                              <span>No Google Account Linked</span>
+                            </span>
+                            <span className="text-amber-900 underline shrink-0 font-black">
+                              Link
+                            </span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Stats Pills */}
+                      <div className="grid grid-cols-2 gap-2 text-xs mb-4">
+                        <div className="bg-neutral-50 rounded-xl p-2 border border-neutral-100">
+                          <span className="text-[10px] uppercase font-bold text-neutral-400 block">
+                            Orders
+                          </span>
+                          <span className="font-bold text-neutral-800">
+                            {orderCount > 0 ? `${orderCount} (€${totalSpend.toFixed(0)})` : 'None yet'}
+                          </span>
+                        </div>
+                        <div className="bg-neutral-50 rounded-xl p-2 border border-neutral-100">
+                          <span className="text-[10px] uppercase font-bold text-neutral-400 block">
+                            Finger Sizes
+                          </span>
+                          <span
+                            className={`font-bold ${
+                              sizeCount >= 10
+                                ? 'text-pink-600'
+                                : sizeCount > 0
+                                ? 'text-amber-600'
+                                : 'text-neutral-400'
+                            }`}
+                          >
+                            {sizeCount >= 10
+                              ? '✅ 10 Sizes'
+                              : sizeCount > 0
+                              ? `${sizeCount}/10 Sizes`
+                              : 'None on file'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAdminSelectedClientSyncId(c.syncId);
+                        window.history.replaceState(null, '', `/profile?clientId=${c.syncId}`);
+                      }}
+                      className="w-full bg-neutral-900 hover:bg-[#FF5C9D] text-white py-2.5 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm cursor-pointer group-hover:bg-[#FF5C9D]"
+                    >
+                      <span>View & Manage Profile</span>
+                      <span>→</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* View 2: Client Profile (with sticky admin header if admin) */
+        <>
+          {/* Admin Sticky Control Bar */}
+          {isAdmin && (
+            <div className="bg-neutral-950 text-white sticky top-0 z-40 px-4 py-2.5 shadow-md border-b border-neutral-800">
+              <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-2.5">
+                {/* Left: Back button + Client switcher dropdown */}
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAdminSelectedClientSyncId(null);
+                      setViewingOwnProfile(false);
+                      window.history.replaceState(null, '', '/profile');
+                    }}
+                    className="flex items-center gap-1.5 text-xs font-bold bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-full transition cursor-pointer"
+                  >
+                    <span>←</span>
+                    <span>Client Directory</span>
+                  </button>
+
+                  {!viewingOwnProfile && clientProfile && (
+                    <div className="flex items-center gap-1.5 bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-1">
+                      <span className="text-[11px] text-neutral-400 font-medium hidden sm:inline">
+                        Client:
+                      </span>
+                      <select
+                        value={clientProfile.syncId}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val) {
+                            setAdminSelectedClientSyncId(val);
+                            window.history.replaceState(null, '', `/profile?clientId=${val}`);
+                          }
+                        }}
+                        className="bg-transparent text-white text-xs font-bold outline-none cursor-pointer max-w-[160px] sm:max-w-[220px] truncate"
+                      >
+                        {adminClients.map((c) => (
+                          <option key={c.syncId} value={c.syncId} className="bg-neutral-900 text-white">
+                            {c.name || `@${c.instagram}` || 'Client'}{' '}
+                            {c.instagram ? `(@${c.instagram})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* Right: Actions */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {!viewingOwnProfile && clientProfile && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => openEditClientModal(clientProfile)}
+                        className="bg-white/15 hover:bg-white/25 text-white text-xs font-bold px-3 py-1.5 rounded-full transition cursor-pointer flex items-center gap-1"
+                      >
+                        <span>✏️</span>
+                        <span className="hidden sm:inline">Edit Details & Linking</span>
+                        <span className="sm:hidden">Edit</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setAdminEditMode((prev) => !prev)}
+                        className={`text-xs font-black px-3.5 py-1.5 rounded-full transition cursor-pointer flex items-center gap-1.5 ${
+                          adminEditMode
+                            ? 'bg-pink-500 text-white shadow-lg ring-2 ring-pink-400 animate-pulse'
+                            : 'bg-neutral-800 hover:bg-neutral-700 text-pink-300 border border-pink-500/30'
+                        }`}
+                      >
+                        <span>{adminEditMode ? '✓ Edit Mode Active' : 'Enable Edit Mode'}</span>
+                      </button>
+                    </>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (viewingOwnProfile) {
+                        setViewingOwnProfile(false);
+                        setAdminSelectedClientSyncId(null);
+                        window.history.replaceState(null, '', '/profile');
+                      } else {
+                        setViewingOwnProfile(true);
+                        setAdminSelectedClientSyncId(null);
+                        window.history.replaceState(null, '', '/profile?view=me');
+                      }
+                    }}
+                    className="text-xs text-neutral-400 hover:text-white px-2 py-1 transition cursor-pointer"
+                    title={viewingOwnProfile ? 'Return to Directory' : 'View your own profile'}
+                  >
+                    {viewingOwnProfile ? '← Client Directory' : '👤 My Profile'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Unlinked Google Account Banner for Admin */}
+          {isAdmin && !viewingOwnProfile && clientProfile && !clientProfile.email && (
+            <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2 text-center text-amber-900 text-xs font-bold flex items-center justify-center gap-2 flex-wrap">
+              <span>⚠️ This client does not have a linked Google Account yet. They cannot sign into the website.</span>
+              <button
+                type="button"
+                onClick={() => openEditClientModal(clientProfile)}
+                className="underline font-black hover:text-amber-950 cursor-pointer"
+              >
+                Link Google Email Now →
+              </button>
+            </div>
+          )}
+
+          <div className="pt-12 pb-2 px-4 text-center">
+            <h1 className="text-2xl font-black text-black">{clientProfile?.name || 'My Profile'}</h1>
+            {clientProfile?.instagram && (
+              <p className="text-xs text-neutral-500 font-bold mt-0.5">
+                @{clientProfile.instagram.replace(/^@/, '')}
+              </p>
+            )}
+          </div>
+
+          {/* Tabs */}
+          <div className="bg-white shadow-sm border-b border-pink-100 flex justify-center gap-8 px-4 py-3 sticky top-[60px] z-30">
         <button
           onClick={() => setActiveTab('sizing')}
           className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
@@ -1735,6 +2496,85 @@ function ProfilePageContent() {
                           </div>
                         </div>
                       ) : null}
+
+                      {/* Admin Order Management Box */}
+                      {isAdmin && (
+                        <div className="mt-3.5 pt-3.5 border-t border-pink-100 bg-gradient-to-r from-pink-50/70 via-white to-pink-50/70 rounded-2xl p-3 sm:p-4 border border-pink-200/80 space-y-3">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <span className="text-[11px] font-black uppercase tracking-wider text-pink-700 flex items-center gap-1.5">
+                              <span>⚙️</span>
+                              <span>Admin Order Controls</span>
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleOrderLoyalty(group)}
+                                className={`text-[10px] font-bold px-3 py-1 rounded-full border transition cursor-pointer ${
+                                  group.earnsStamps
+                                    ? 'bg-pink-100 border-pink-300 text-pink-700'
+                                    : 'bg-neutral-100 border-neutral-300 text-neutral-600'
+                                }`}
+                                title="Toggle whether this order awards digital loyalty stamps"
+                              >
+                                {group.earnsStamps ? '★ Loyalty Stamp: YES' : '☆ Loyalty Stamp: NO'}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 mb-1">
+                                Update Order Status
+                              </label>
+                              <select
+                                value={
+                                  group.status === 'Pending' || !group.status
+                                    ? 'Received'
+                                    : group.status.toLowerCase().includes('queue') ||
+                                      group.status.toLowerCase() === 'confirmed'
+                                    ? 'Confirmed'
+                                    : group.status.toLowerCase().includes('paint') ||
+                                      group.status.toLowerCase() === 'ready' ||
+                                      group.status.toLowerCase() === 'completed'
+                                    ? 'Ready'
+                                    : group.status.toLowerCase().includes('dispatch') ||
+                                      group.status.toLowerCase() === 'sent' ||
+                                      group.status.toLowerCase() === 'shipped'
+                                    ? 'Dispatched'
+                                    : group.status.toLowerCase().includes('deliver')
+                                    ? 'Delivered'
+                                    : group.status
+                                }
+                                onChange={(e) => handleUpdateOrderStatus(group, e.target.value)}
+                                className="w-full bg-white border border-pink-200 text-neutral-900 text-xs font-bold rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-500 cursor-pointer shadow-sm"
+                              >
+                                <option value="Received">1. Order Received</option>
+                                <option value="Confirmed">2. Confirmed & In Queue</option>
+                                <option value="Ready">3. Hand-Painted & Ready</option>
+                                <option value="Dispatched">4. Dispatched</option>
+                                <option value="Delivered">5. Delivered</option>
+                                <option value="Cancelled">Cancelled</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 mb-1">
+                                Finished Set Photo
+                              </label>
+                              <label className="w-full bg-white hover:bg-neutral-50 border border-pink-200 text-neutral-800 text-xs font-bold rounded-xl px-3 py-2 flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm">
+                                <span>📷</span>
+                                <span>Upload Studio Photo</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={(e) => handleUploadCompletedPhoto(e, group.orderDate)}
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })
@@ -1743,6 +2583,8 @@ function ProfilePageContent() {
           </div>
         )}
       </main>
+    </>
+  )}
 
       {/* Admin Inline Milestone Rewards Editor Modal */}
       {isEditingMilestones && (
@@ -1950,6 +2792,415 @@ function ProfilePageContent() {
                 className="px-5 py-2.5 rounded-xl bg-black hover:bg-[#FF5C9D] text-white text-xs font-bold transition cursor-pointer disabled:opacity-50 shadow-sm"
               >
                 {savingMilestones ? 'Saving...' : 'Save Milestone Rewards'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Edit Client Details & Account Linking Modal */}
+      {isEditingClientModal && (
+        <div className="fixed inset-0 z-[220] flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-neutral-950/60 backdrop-blur-sm"
+            onClick={() => setIsEditingClientModal(false)}
+          />
+          <div className="relative z-10 w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-pink-100 overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-pink-100 bg-gradient-to-r from-pink-50 via-white to-pink-50 flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-lg text-neutral-900">Edit Client & Account Linking</h3>
+                <p className="text-xs text-neutral-500">
+                  Update contact information, fix sign-in Google email, or edit custom shape/length.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditingClientModal(false)}
+                className="text-neutral-400 hover:text-neutral-700 w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-4 flex-1">
+              {/* Linked Google Email (Primary Fix for Account Linking) */}
+              <div className="bg-pink-50/60 rounded-2xl p-3.5 border border-pink-200/80 space-y-1.5">
+                <label className="block text-[11px] font-black uppercase tracking-wider text-pink-700">
+                  🔗 Linked Google Account Email
+                </label>
+                <input
+                  type="email"
+                  value={clientEditFormState.email || ''}
+                  onChange={(e) =>
+                    setClientEditFormState((prev: any) => ({ ...prev, email: e.target.value }))
+                  }
+                  placeholder="client_google_email@gmail.com"
+                  className="w-full bg-white border border-pink-200 rounded-xl px-3 py-2 text-xs font-bold text-neutral-900 focus:outline-none focus:border-pink-500"
+                />
+                <p className="text-[11px] text-neutral-500 leading-relaxed">
+                  Enter the Google account email this client uses when clicking &quot;Sign in with Google&quot;. Once saved, they will automatically see their orders and custom sizes upon logging in.
+                </p>
+              </div>
+
+              {/* Name & Instagram */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                    Client Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={clientEditFormState.name || ''}
+                    onChange={(e) =>
+                      setClientEditFormState((prev: any) => ({ ...prev, name: e.target.value }))
+                    }
+                    placeholder="e.g. Sarah Jenkins"
+                    className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs font-medium text-neutral-900 focus:outline-none focus:border-pink-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                    Instagram Handle
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 font-bold text-xs">
+                      @
+                    </span>
+                    <input
+                      type="text"
+                      value={clientEditFormState.instagram || ''}
+                      onChange={(e) =>
+                        setClientEditFormState((prev: any) => ({
+                          ...prev,
+                          instagram: e.target.value,
+                        }))
+                      }
+                      placeholder="username"
+                      className="w-full bg-white border border-neutral-200 rounded-xl pl-7 pr-3 py-2 text-xs font-medium text-neutral-900 focus:outline-none focus:border-pink-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Phone & Address */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={clientEditFormState.phone || ''}
+                    onChange={(e) =>
+                      setClientEditFormState((prev: any) => ({ ...prev, phone: e.target.value }))
+                    }
+                    placeholder="+353 ..."
+                    className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs font-medium text-neutral-900 focus:outline-none focus:border-pink-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                    Default Shape & Length
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <select
+                      value={clientEditFormState.defaultLength || 'M'}
+                      onChange={(e) =>
+                        setClientEditFormState((prev: any) => ({
+                          ...prev,
+                          defaultLength: e.target.value,
+                        }))
+                      }
+                      className="bg-white border border-neutral-200 rounded-xl px-2 py-2 text-xs font-bold text-neutral-900 outline-none focus:border-pink-500"
+                    >
+                      {lengthSelectList.map((l) => (
+                        <option key={l} value={l}>
+                          {l}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={clientEditFormState.defaultShape || 'Almond'}
+                      onChange={(e) =>
+                        setClientEditFormState((prev: any) => ({
+                          ...prev,
+                          defaultShape: e.target.value,
+                        }))
+                      }
+                      className="bg-white border border-neutral-200 rounded-xl px-2 py-2 text-xs font-bold text-neutral-900 outline-none focus:border-pink-500"
+                    >
+                      {shapeSelectList.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Delivery Address */}
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                  Delivery / Shipping Address
+                </label>
+                <textarea
+                  rows={2}
+                  value={clientEditFormState.address || ''}
+                  onChange={(e) =>
+                    setClientEditFormState((prev: any) => ({ ...prev, address: e.target.value }))
+                  }
+                  placeholder="Street, City, County, Postal Code..."
+                  className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs font-medium text-neutral-900 focus:outline-none focus:border-pink-500"
+                />
+              </div>
+
+              {/* Design Notes */}
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                  Design & Sizing Notes
+                </label>
+                <textarea
+                  rows={2}
+                  value={clientEditFormState.designNotes || ''}
+                  onChange={(e) =>
+                    setClientEditFormState((prev: any) => ({
+                      ...prev,
+                      designNotes: e.target.value,
+                    }))
+                  }
+                  placeholder="Special requests, custom nail curvature, preferences..."
+                  className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs font-medium text-neutral-900 focus:outline-none focus:border-pink-500"
+                />
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-pink-100 bg-neutral-50 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (
+                    confirm(
+                      `Are you sure you want to delete client "${
+                        clientEditFormState.name || clientEditFormState.instagram
+                      }"?`
+                    )
+                  ) {
+                    try {
+                      await setDoc(
+                        doc(db, 'users', vendorUid, 'clients', clientEditFormState.syncId),
+                        { isDeleted: true, updatedAt: Date.now() },
+                        { merge: true }
+                      );
+                      setAdminClients((prev) =>
+                        prev.filter((c) => c.syncId !== clientEditFormState.syncId)
+                      );
+                      setAdminSelectedClientSyncId(null);
+                      setIsEditingClientModal(false);
+                    } catch (e) {
+                      console.error('Failed to delete client:', e);
+                    }
+                  }
+                }}
+                className="text-red-500 hover:text-red-700 text-xs font-bold px-2 py-1 transition cursor-pointer"
+              >
+                Delete Client
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingClientModal(false)}
+                  className="px-4 py-2 text-xs font-bold text-neutral-600 hover:text-black rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={adminSavingClient}
+                  onClick={handleSaveClientDetails}
+                  className="px-5 py-2.5 rounded-xl bg-black hover:bg-[#FF5C9D] text-white text-xs font-bold transition cursor-pointer disabled:opacity-50 shadow-sm"
+                >
+                  {adminSavingClient ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Create New Client Modal */}
+      {isCreatingClientModal && (
+        <div className="fixed inset-0 z-[220] flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-neutral-950/60 backdrop-blur-sm"
+            onClick={() => setIsCreatingClientModal(false)}
+          />
+          <div className="relative z-10 w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-pink-100 overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-pink-100 bg-gradient-to-r from-pink-50 via-white to-pink-50 flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-lg text-neutral-900">Create New Client Profile</h3>
+                <p className="text-xs text-neutral-500">
+                  Add a client to your studio directory to track orders and custom sizes.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCreatingClientModal(false)}
+                className="text-neutral-400 hover:text-neutral-700 w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-4 flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                    Client Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={newClientFormState.name}
+                    onChange={(e) =>
+                      setNewClientFormState((prev: any) => ({ ...prev, name: e.target.value }))
+                    }
+                    placeholder="e.g. Jessica Smith"
+                    className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs font-medium text-neutral-900 focus:outline-none focus:border-pink-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                    Instagram Handle
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 font-bold text-xs">
+                      @
+                    </span>
+                    <input
+                      type="text"
+                      value={newClientFormState.instagram}
+                      onChange={(e) =>
+                        setNewClientFormState((prev: any) => ({
+                          ...prev,
+                          instagram: e.target.value,
+                        }))
+                      }
+                      placeholder="jessica_nails"
+                      className="w-full bg-white border border-neutral-200 rounded-xl pl-7 pr-3 py-2 text-xs font-medium text-neutral-900 focus:outline-none focus:border-pink-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                  Google Account Email (Optional)
+                </label>
+                <input
+                  type="email"
+                  value={newClientFormState.email}
+                  onChange={(e) =>
+                    setNewClientFormState((prev: any) => ({ ...prev, email: e.target.value }))
+                  }
+                  placeholder="jessica@gmail.com"
+                  className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs font-medium text-neutral-900 focus:outline-none focus:border-pink-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                    Phone Number (Optional)
+                  </label>
+                  <input
+                    type="tel"
+                    value={newClientFormState.phone}
+                    onChange={(e) =>
+                      setNewClientFormState((prev: any) => ({ ...prev, phone: e.target.value }))
+                    }
+                    placeholder="+353 ..."
+                    className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs font-medium text-neutral-900 focus:outline-none focus:border-pink-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                    Default Shape & Length
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <select
+                      value={newClientFormState.defaultLength}
+                      onChange={(e) =>
+                        setNewClientFormState((prev: any) => ({
+                          ...prev,
+                          defaultLength: e.target.value,
+                        }))
+                      }
+                      className="bg-white border border-neutral-200 rounded-xl px-2 py-2 text-xs font-bold text-neutral-900 outline-none focus:border-pink-500"
+                    >
+                      {lengthSelectList.map((l) => (
+                        <option key={l} value={l}>
+                          {l}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={newClientFormState.defaultShape}
+                      onChange={(e) =>
+                        setNewClientFormState((prev: any) => ({
+                          ...prev,
+                          defaultShape: e.target.value,
+                        }))
+                      }
+                      className="bg-white border border-neutral-200 rounded-xl px-2 py-2 text-xs font-bold text-neutral-900 outline-none focus:border-pink-500"
+                    >
+                      {shapeSelectList.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                  Delivery Address (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={newClientFormState.address}
+                  onChange={(e) =>
+                    setNewClientFormState((prev: any) => ({ ...prev, address: e.target.value }))
+                  }
+                  placeholder="Delivery address..."
+                  className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs font-medium text-neutral-900 focus:outline-none focus:border-pink-500"
+                />
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-pink-100 bg-neutral-50 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsCreatingClientModal(false)}
+                className="px-4 py-2 text-xs font-bold text-neutral-600 hover:text-black rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={adminSavingClient}
+                onClick={handleCreateNewClient}
+                className="px-5 py-2.5 rounded-xl bg-black hover:bg-[#FF5C9D] text-white text-xs font-bold transition cursor-pointer disabled:opacity-50 shadow-sm"
+              >
+                {adminSavingClient ? 'Creating...' : 'Create Client'}
               </button>
             </div>
           </div>
