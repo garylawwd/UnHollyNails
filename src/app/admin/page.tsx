@@ -460,12 +460,12 @@ export default function AdminDashboard() {
         description: "", 
         backgroundImageUrl: "", 
         inRibbon: false,
-          isFeatured: false,
-        headerColor: "#ffffff",
+        isFeatured: false,
+        headerColor: "#171717",
         headerBgColor: "#ffffff",
-        descriptionColor: "#e5e5e5",
-        ombreStart: "#f472b6",
-        ombreEnd: "#000000",
+        descriptionColor: "#4b5563",
+        ombreStart: "#fbcfe8",
+        ombreEnd: "#ffffff",
         bgScale: 100
       };
       let newImageUrl = meta.backgroundImageUrl;
@@ -881,11 +881,11 @@ export default function AdminDashboard() {
                           <div className="flex items-center gap-3">
                             <input 
                               type="color" 
-                              value={collectionMetadata[selectedTag]?.headerColor || "#ffffff"}
+                              value={collectionMetadata[selectedTag]?.headerColor || "#171717"}
                               onChange={e => setCollectionMetadata(p => ({...p, [selectedTag]: {...(p[selectedTag] || {}), headerColor: e.target.value, tag: selectedTag}}))}
                               className="w-12 h-12 rounded cursor-pointer border-0 p-0"
                             />
-                            <span className="text-sm font-mono">{collectionMetadata[selectedTag]?.headerColor || "#ffffff"}</span>
+                            <span className="text-sm font-mono">{collectionMetadata[selectedTag]?.headerColor || "#171717"}</span>
                           </div>
                         </div>
                         <div>
@@ -893,11 +893,11 @@ export default function AdminDashboard() {
                           <div className="flex items-center gap-3">
                             <input 
                               type="color" 
-                              value={collectionMetadata[selectedTag]?.descriptionColor || "#e5e5e5"}
+                              value={collectionMetadata[selectedTag]?.descriptionColor || "#4b5563"}
                               onChange={e => setCollectionMetadata(p => ({...p, [selectedTag]: {...(p[selectedTag] || {}), descriptionColor: e.target.value, tag: selectedTag}}))}
                               className="w-12 h-12 rounded cursor-pointer border-0 p-0"
                             />
-                            <span className="text-sm font-mono">{collectionMetadata[selectedTag]?.descriptionColor || "#e5e5e5"}</span>
+                            <span className="text-sm font-mono">{collectionMetadata[selectedTag]?.descriptionColor || "#4b5563"}</span>
                           </div>
                         </div>
                       </div>
@@ -905,9 +905,9 @@ export default function AdminDashboard() {
                       <div>
                         <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Ombre Gradient</label>
                         <div className="flex items-center gap-3">
-                          <input type="color" value={collectionMetadata[selectedTag]?.ombreStart || "#f472b6"} onChange={e => setCollectionMetadata(p => ({...p, [selectedTag]: {...(p[selectedTag] || {}), ombreStart: e.target.value, tag: selectedTag}}))} className="w-10 h-10 rounded cursor-pointer border-0 p-0" />
-                          <div className="flex-1 h-8 rounded-lg" style={{ background: `linear-gradient(to right, ${collectionMetadata[selectedTag]?.ombreStart || '#f472b6'}, ${collectionMetadata[selectedTag]?.ombreEnd || '#000000'})` }}></div>
-                          <input type="color" value={collectionMetadata[selectedTag]?.ombreEnd || "#000000"} onChange={e => setCollectionMetadata(p => ({...p, [selectedTag]: {...(p[selectedTag] || {}), ombreEnd: e.target.value, tag: selectedTag}}))} className="w-10 h-10 rounded cursor-pointer border-0 p-0" />
+                          <input type="color" value={collectionMetadata[selectedTag]?.ombreStart || "#fbcfe8"} onChange={e => setCollectionMetadata(p => ({...p, [selectedTag]: {...(p[selectedTag] || {}), ombreStart: e.target.value, tag: selectedTag}}))} className="w-10 h-10 rounded cursor-pointer border-0 p-0" />
+                          <div className="flex-1 h-8 rounded-lg" style={{ background: `linear-gradient(to right, ${collectionMetadata[selectedTag]?.ombreStart || '#fbcfe8'}, ${collectionMetadata[selectedTag]?.ombreEnd || '#ffffff'})` }}></div>
+                          <input type="color" value={collectionMetadata[selectedTag]?.ombreEnd || "#ffffff"} onChange={e => setCollectionMetadata(p => ({...p, [selectedTag]: {...(p[selectedTag] || {}), ombreEnd: e.target.value, tag: selectedTag}}))} className="w-10 h-10 rounded cursor-pointer border-0 p-0" />
                         </div>
                       </div>
 

@@ -81,8 +81,8 @@ function CollectionPageContent() {
   const bgFileRef = useRef<HTMLInputElement>(null);
 
   // Current active ombre colors (reflects real-time slider edits if editor modal is open)
-  const currentOmbreStart = (showEditor && editData?.ombreStart) || collectionInfo?.ombreStart || '#f472b6';
-  const currentOmbreEnd = (showEditor && editData?.ombreEnd) || collectionInfo?.ombreEnd || '#000000';
+  const currentOmbreStart = (showEditor && editData?.ombreStart) || collectionInfo?.ombreStart || '#fbcfe8';
+  const currentOmbreEnd = (showEditor && editData?.ombreEnd) || collectionInfo?.ombreEnd || '#ffffff';
   const currentThemeMode = (showEditor && editData?.themeMode) || collectionInfo?.themeMode || 'auto';
 
   const isThemeLight = useMemo(() => {
@@ -291,10 +291,11 @@ function CollectionPageContent() {
           title: fallbackTitle,
           description: fallbackDesc,
           backgroundImageUrl: "",
-          headerColor: "#ffffff",
-          descriptionColor: "#e5e5e5",
-          ombreStart: "#f472b6",
-          ombreEnd: "#000000",
+          headerColor: "#171717",
+          descriptionColor: "#4b5563",
+          ombreStart: "#fbcfe8",
+          ombreEnd: "#ffffff",
+          themeMode: "light",
           bgScale: 100,
           tag: canonicalTag
         };
@@ -966,9 +967,9 @@ function CollectionPageContent() {
               <div>
                 <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Background Gradient</label>
                 <div className="flex items-center gap-3 bg-neutral-50 p-4 rounded-2xl border mb-3">
-                  <input type="color" value={editData.ombreStart || '#f472b6'} onChange={e => setEditData((p: any) => ({ ...p, ombreStart: e.target.value }))} className="w-10 h-10 rounded cursor-pointer border-0 p-0" />
-                  <div className="flex-1 h-8 rounded-lg shadow-inner" style={{ background: `linear-gradient(to right, ${editData.ombreStart || '#f472b6'}, ${editData.ombreEnd || '#000000'})` }}></div>
-                  <input type="color" value={editData.ombreEnd || '#000000'} onChange={e => setEditData((p: any) => ({ ...p, ombreEnd: e.target.value }))} className="w-10 h-10 rounded cursor-pointer border-0 p-0" />
+                  <input type="color" value={editData.ombreStart || '#fbcfe8'} onChange={e => setEditData((p: any) => ({ ...p, ombreStart: e.target.value }))} className="w-10 h-10 rounded cursor-pointer border-0 p-0" />
+                  <div className="flex-1 h-8 rounded-lg shadow-inner" style={{ background: `linear-gradient(to right, ${editData.ombreStart || '#fbcfe8'}, ${editData.ombreEnd || '#ffffff'})` }}></div>
+                  <input type="color" value={editData.ombreEnd || '#ffffff'} onChange={e => setEditData((p: any) => ({ ...p, ombreEnd: e.target.value }))} className="w-10 h-10 rounded cursor-pointer border-0 p-0" />
                 </div>
                 
                 {/* Quick Presets */}
@@ -1018,7 +1019,7 @@ function CollectionPageContent() {
                       className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
                     >
                       <span className="w-5 h-5 rounded-full bg-gradient-to-r from-pink-300 to-white inline-block shrink-0 shadow-inner"></span>
-                      <span>Pink to White</span>
+                      <span>UnHolly Ombre Light</span>
                     </button>
                     <button
                       type="button"
@@ -1033,7 +1034,7 @@ function CollectionPageContent() {
                       className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
                     >
                       <span className="w-5 h-5 rounded-full bg-gradient-to-r from-pink-400 to-black inline-block shrink-0"></span>
-                      <span>Unholly Ombre</span>
+                      <span>UnHolly Ombre Dark</span>
                     </button>
                     <button
                       type="button"

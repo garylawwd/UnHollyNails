@@ -47,8 +47,8 @@ function isCollectionCardLight(collection: any): boolean {
   if (mode === 'dark') return false;
   
   // Use card-specific ombre if custom, else page ombre
-  const start = (custom && collection?.cardOmbreStart) ? collection.cardOmbreStart : (collection?.ombreStart || '#f472b6');
-  const end = (custom && collection?.cardOmbreEnd) ? collection.cardOmbreEnd : (collection?.ombreEnd || '#000000');
+  const start = (custom && collection?.cardOmbreStart) ? collection.cardOmbreStart : (collection?.ombreStart || '#fbcfe8');
+  const end = (custom && collection?.cardOmbreEnd) ? collection.cardOmbreEnd : (collection?.ombreEnd || '#ffffff');
   
   const startLum = getColorLuminance(start);
   const endLum = getColorLuminance(end);
@@ -281,8 +281,8 @@ export default function Home() {
             title: data.title || (lower.charAt(0).toUpperCase() + lower.slice(1)),
             description: data.description || "",
             backgroundImageUrl: data.backgroundImageUrl || "",
-            ombreStart: data.ombreStart || "#f472b6",
-            ombreEnd: data.ombreEnd || "#000000",
+            ombreStart: data.ombreStart || "#fbcfe8",
+            ombreEnd: data.ombreEnd || "#ffffff",
             bgScale: data.bgScale || 100,
             cardImageUrl: data.cardImageUrl || "",
             cardBgScale: data.cardBgScale || data.bgScale || 100,
@@ -848,8 +848,8 @@ export default function Home() {
                             title: c.title || c.tag,
                             description: c.description || "View this collection",
                             backgroundImageUrl: c.backgroundImageUrl || "",
-                            ombreStart: c.ombreStart || "#f472b6",
-                            ombreEnd: c.ombreEnd || "#000000",
+                            ombreStart: c.ombreStart || "#fbcfe8",
+                            ombreEnd: c.ombreEnd || "#ffffff",
                             bgScale: c.bgScale || 100,
                             cardImageUrl: c.cardImageUrl || "",
                             cardBgScale: c.cardBgScale || c.bgScale || 100,
@@ -866,8 +866,8 @@ export default function Home() {
                       ).map((collection: any, index: number) => {
                         const isLight = isCollectionCardLight(collection);
                         const custom = !!collection.customCardColors;
-                        const cardStart = (custom && collection.cardOmbreStart) ? collection.cardOmbreStart : (collection.ombreStart || '#f472b6');
-                        const cardEnd = (custom && collection.cardOmbreEnd) ? collection.cardOmbreEnd : (collection.ombreEnd || '#000000');
+                        const cardStart = (custom && collection.cardOmbreStart) ? collection.cardOmbreStart : (collection.ombreStart || '#fbcfe8');
+                        const cardEnd = (custom && collection.cardOmbreEnd) ? collection.cardOmbreEnd : (collection.ombreEnd || '#ffffff');
                         const defaultTitleColor = isLight ? '#171717' : '#ffffff';
                         const defaultDescColor = isLight ? '#525252' : '#e5e5e5';
                         const titleColor = (custom && collection.cardHeaderColor) ? collection.cardHeaderColor : (collection.headerColor || defaultTitleColor);
@@ -1317,15 +1317,15 @@ export default function Home() {
           const isEditPageLight = (() => {
             if (editData.themeMode === 'light') return true;
             if (editData.themeMode === 'dark') return false;
-            const sLum = getColorLuminance(editData.ombreStart || '#f472b6');
-            const eLum = getColorLuminance(editData.ombreEnd || '#000000');
+            const sLum = getColorLuminance(editData.ombreStart || '#fbcfe8');
+            const eLum = getColorLuminance(editData.ombreEnd || '#ffffff');
             return ((sLum + eLum) / 2) > 128 || sLum > 160 || eLum > 160;
           })();
 
           const isEditCardLight = isCollectionCardLight(editData);
           const editCardCustom = !!editData.customCardColors;
-          const editCardStart = (editCardCustom && editData.cardOmbreStart) ? editData.cardOmbreStart : (editData.ombreStart || '#f472b6');
-          const editCardEnd = (editCardCustom && editData.cardOmbreEnd) ? editData.cardOmbreEnd : (editData.ombreEnd || '#000000');
+          const editCardStart = (editCardCustom && editData.cardOmbreStart) ? editData.cardOmbreStart : (editData.ombreStart || '#fbcfe8');
+          const editCardEnd = (editCardCustom && editData.cardOmbreEnd) ? editData.cardOmbreEnd : (editData.ombreEnd || '#ffffff');
           const editCardTitle = (editCardCustom && editData.cardHeaderColor) ? editData.cardHeaderColor : (editData.headerColor || (isEditCardLight ? '#171717' : '#ffffff'));
           const editCardDesc = (editCardCustom && editData.cardDescriptionColor) ? editData.cardDescriptionColor : (editData.descriptionColor || (isEditCardLight ? '#525252' : '#e5e5e5'));
 
@@ -1449,8 +1449,8 @@ export default function Home() {
                                 ...p,
                                 customCardColors: checked,
                                 ...(checked && !p.cardOmbreStart ? {
-                                  cardOmbreStart: p.ombreStart || '#f472b6',
-                                  cardOmbreEnd: p.ombreEnd || '#000000',
+                                  cardOmbreStart: p.ombreStart || '#fbcfe8',
+                                  cardOmbreEnd: p.ombreEnd || '#ffffff',
                                   cardHeaderColor: p.headerColor || '',
                                   cardDescriptionColor: p.descriptionColor || '',
                                   cardThemeMode: p.themeMode || 'auto'
@@ -1520,7 +1520,7 @@ export default function Home() {
                                 className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
                               >
                                 <span className="w-5 h-5 rounded-full bg-gradient-to-r from-pink-300 to-white inline-block shrink-0 shadow-inner"></span>
-                                <span>Pink to White</span>
+                                <span>UnHolly Ombre Light</span>
                               </button>
                               <button
                                 type="button"
@@ -1535,7 +1535,7 @@ export default function Home() {
                                 className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
                               >
                                 <span className="w-5 h-5 rounded-full bg-gradient-to-r from-pink-400 to-black inline-block shrink-0"></span>
-                                <span>Unholly Ombre</span>
+                                <span>UnHolly Ombre Dark</span>
                               </button>
                               <button
                                 type="button"
@@ -1561,17 +1561,17 @@ export default function Home() {
                             <div className="flex items-center gap-3 bg-neutral-50 p-3 rounded-2xl border">
                               <input 
                                 type="color" 
-                                value={editData.cardOmbreStart || editData.ombreStart || '#f472b6'} 
+                                value={editData.cardOmbreStart || editData.ombreStart || '#fbcfe8'} 
                                 onChange={e => setEditData((p: any) => ({ ...p, cardOmbreStart: e.target.value }))} 
                                 className="w-9 h-9 rounded cursor-pointer border-0 p-0" 
                               />
                               <div 
                                 className="flex-1 h-8 rounded-lg shadow-inner" 
-                                style={{ background: `linear-gradient(to right, ${editData.cardOmbreStart || editData.ombreStart || '#f472b6'}, ${editData.cardOmbreEnd || editData.ombreEnd || '#000000'})` }}
+                                style={{ background: `linear-gradient(to right, ${editData.cardOmbreStart || editData.ombreStart || '#fbcfe8'}, ${editData.cardOmbreEnd || editData.ombreEnd || '#ffffff'})` }}
                               />
                               <input 
                                 type="color" 
-                                value={editData.cardOmbreEnd || editData.ombreEnd || '#000000'} 
+                                value={editData.cardOmbreEnd || editData.ombreEnd || '#ffffff'} 
                                 onChange={e => setEditData((p: any) => ({ ...p, cardOmbreEnd: e.target.value }))} 
                                 className="w-9 h-9 rounded cursor-pointer border-0 p-0" 
                               />
@@ -1721,7 +1721,7 @@ export default function Home() {
                             className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
                           >
                             <span className="w-5 h-5 rounded-full bg-gradient-to-r from-pink-300 to-white inline-block shrink-0 shadow-inner"></span>
-                            <span>Pink to White</span>
+                            <span>UnHolly Ombre Light</span>
                           </button>
                           <button
                             type="button"
@@ -1736,7 +1736,7 @@ export default function Home() {
                             className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
                           >
                             <span className="w-5 h-5 rounded-full bg-gradient-to-r from-pink-400 to-black inline-block shrink-0"></span>
-                            <span>Unholly Ombre</span>
+                            <span>UnHolly Ombre Dark</span>
                           </button>
                           <button
                             type="button"
@@ -1760,9 +1760,9 @@ export default function Home() {
                       <div>
                         <label className="block text-xs font-bold text-neutral-500 uppercase mb-2">Page Background Gradient</label>
                         <div className="flex items-center gap-3 bg-neutral-50 p-4 rounded-2xl border">
-                          <input type="color" value={editData.ombreStart || '#f472b6'} onChange={e => setEditData((p: any) => ({ ...p, ombreStart: e.target.value }))} className="w-10 h-10 rounded cursor-pointer border-0 p-0" />
-                          <div className="flex-1 h-8 rounded-lg shadow-inner" style={{ background: `linear-gradient(to right, ${editData.ombreStart || '#f472b6'}, ${editData.ombreEnd || '#000000'})` }}></div>
-                          <input type="color" value={editData.ombreEnd || '#000000'} onChange={e => setEditData((p: any) => ({ ...p, ombreEnd: e.target.value }))} className="w-10 h-10 rounded cursor-pointer border-0 p-0" />
+                          <input type="color" value={editData.ombreStart || '#fbcfe8'} onChange={e => setEditData((p: any) => ({ ...p, ombreStart: e.target.value }))} className="w-10 h-10 rounded cursor-pointer border-0 p-0" />
+                          <div className="flex-1 h-8 rounded-lg shadow-inner" style={{ background: `linear-gradient(to right, ${editData.ombreStart || '#fbcfe8'}, ${editData.ombreEnd || '#ffffff'})` }}></div>
+                          <input type="color" value={editData.ombreEnd || '#ffffff'} onChange={e => setEditData((p: any) => ({ ...p, ombreEnd: e.target.value }))} className="w-10 h-10 rounded cursor-pointer border-0 p-0" />
                         </div>
                       </div>
 
