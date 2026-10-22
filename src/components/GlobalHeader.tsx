@@ -570,7 +570,7 @@ export default function GlobalHeader() {
                   </button>
 
                   {showNotifDropdown && (
-                    <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-neutral-900 border border-pink-500/40 rounded-2xl shadow-2xl z-[120] overflow-hidden text-white animate-in fade-in duration-150">
+                    <div className="absolute left-0 sm:left-auto sm:right-0 mt-2 w-[calc(100vw-24px)] max-w-sm sm:w-96 bg-neutral-900 border border-pink-500/40 rounded-2xl shadow-2xl z-[120] overflow-hidden text-white animate-in fade-in duration-150">
                       <div className="px-4 py-3 bg-neutral-950 border-b border-white/10 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-black uppercase tracking-widest text-pink-400">Studio Alerts</span>

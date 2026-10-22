@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState, useEffect, useMemo, useRef, KeyboardEvent } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, KeyboardEvent } from "react";
 import { collectionGroup, collection, getDocs, doc, updateDoc, query, where, getDoc, setDoc, deleteDoc } from "firebase/firestore";
 import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User } from "firebase/auth";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -453,6 +453,40 @@ export default function Home() {
     }
   };
 
+  const featuredScrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(true);
+
+  const checkFeaturedScroll = useCallback(() => {
+    if (featuredScrollRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = featuredScrollRef.current;
+      setCanScrollLeft(scrollLeft > 10);
+      setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 10);
+    }
+  }, []);
+
+  useEffect(() => {
+    const el = featuredScrollRef.current;
+    if (!el) return;
+    checkFeaturedScroll();
+    el.addEventListener('scroll', checkFeaturedScroll, { passive: true });
+    window.addEventListener('resize', checkFeaturedScroll);
+    return () => {
+      el.removeEventListener('scroll', checkFeaturedScroll);
+      window.removeEventListener('resize', checkFeaturedScroll);
+    };
+  }, [checkFeaturedScroll, ribbonCollections, allCollections]);
+
+  const scrollFeatured = (direction: 'left' | 'right') => {
+    if (featuredScrollRef.current) {
+      const scrollAmount = featuredScrollRef.current.clientWidth * 0.85;
+      featuredScrollRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      });
+    }
+  };
+
   const promoProducts = useMemo(() => products.filter(p => p.isPromo), [products]);
   
   // dynamicFilters and displayedProducts removed since ribbon acts as global nav
@@ -570,67 +604,66 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Modern Editorial Studio Features Showcase */}
-              <div className="w-full px-4 sm:px-6 relative z-20 mb-2 sm:mb-4">
-                <div className="max-w-5xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                  {[
-                    {
-                      titleKey: "feature1Title",
-                      subKey: "feature1Sub",
-                      defaultTitle: "Bespoke Artistry",
-                      defaultSub: "100% Hand-Painted in Studio",
-                      icon: (
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 sm:w-5 sm:h-5 text-[#FF5C9D]">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
-                        </svg>
-                      )
-                    },
-                    {
-                      titleKey: "feature2Title",
-                      subKey: "feature2Sub",
-                      defaultTitle: "Salon-Grade Gel",
-                      defaultSub: "Reusable Luxury Soft Gel Tips",
-                      icon: (
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 sm:w-5 sm:h-5 text-[#FF5C9D]">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
-                        </svg>
-                      )
-                    },
-                    {
-                      titleKey: "feature3Title",
-                      subKey: "feature3Sub",
-                      defaultTitle: "Custom Millimeter Fit",
-                      defaultSub: "Tailored to Your Exact Nail Beds",
-                      icon: (
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 sm:w-5 sm:h-5 text-[#FF5C9D]">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
-                        </svg>
-                      )
-                    },
-                    {
-                      titleKey: "feature4Title",
-                      subKey: "feature4Sub",
-                      defaultTitle: "Complete Prep Kit",
-                      defaultSub: "Includes File, Buffer, Tabs & Glue",
-                      icon: (
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 sm:w-5 sm:h-5 text-[#FF5C9D]">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M21 11.25v8.25a1.5 1.5 0 01-1.5 1.5H5.25a1.5 1.5 0 01-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 109.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1114.625 7.5H12m0 0V21m-8.625-9.75h18c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125h-18c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-                        </svg>
-                      )
-                    }
-                  ].map((feat, idx) => {
-                    const tVal = (homeContent as any)[feat.titleKey] || feat.defaultTitle;
-                    const sVal = (homeContent as any)[feat.subKey] || feat.defaultSub;
-                    return (
-                      <div
-                        key={idx}
-                        className="group relative bg-white/80 backdrop-blur-xl border border-pink-100/90 hover:border-pink-300/80 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden"
-                      >
-                        <div className="absolute -right-6 -top-6 w-20 h-20 bg-pink-200/30 rounded-full blur-xl pointer-events-none group-hover:bg-pink-300/40 transition-colors" />
-                        <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-pink-50 border border-pink-100 flex items-center justify-center mb-2.5 sm:mb-3 group-hover:scale-105 transition-transform">
-                          {feat.icon}
-                        </div>
-                        {editMode ? (
+              {/* Modern Sleek Studio Features Showcase / Infinite Marquee */}
+              {editMode ? (
+                <div className="w-full px-4 sm:px-6 relative z-20 mb-2 sm:mb-4">
+                  <div className="max-w-5xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                    {[
+                      {
+                        titleKey: "feature1Title",
+                        subKey: "feature1Sub",
+                        defaultTitle: "Bespoke Artistry",
+                        defaultSub: "100% Hand-Painted in Studio",
+                        icon: (
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 sm:w-5 sm:h-5 text-[#FF5C9D]">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
+                          </svg>
+                        )
+                      },
+                      {
+                        titleKey: "feature2Title",
+                        subKey: "feature2Sub",
+                        defaultTitle: "Salon-Grade Gel",
+                        defaultSub: "Reusable Luxury Soft Gel Tips",
+                        icon: (
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 sm:w-5 sm:h-5 text-[#FF5C9D]">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+                          </svg>
+                        )
+                      },
+                      {
+                        titleKey: "feature3Title",
+                        subKey: "feature3Sub",
+                        defaultTitle: "Custom Millimeter Fit",
+                        defaultSub: "Tailored to Your Exact Nail Beds",
+                        icon: (
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 sm:w-5 sm:h-5 text-[#FF5C9D]">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+                          </svg>
+                        )
+                      },
+                      {
+                        titleKey: "feature4Title",
+                        subKey: "feature4Sub",
+                        defaultTitle: "Complete Prep Kit",
+                        defaultSub: "Includes File, Buffer, Tabs & Glue",
+                        icon: (
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4 sm:w-5 sm:h-5 text-[#FF5C9D]">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 11.25v8.25a1.5 1.5 0 01-1.5 1.5H5.25a1.5 1.5 0 01-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 109.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1114.625 7.5H12m0 0V21m-8.625-9.75h18c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125h-18c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                          </svg>
+                        )
+                      }
+                    ].map((feat, idx) => {
+                      const tVal = (homeContent as any)[feat.titleKey] || feat.defaultTitle;
+                      const sVal = (homeContent as any)[feat.subKey] || feat.defaultSub;
+                      return (
+                        <div
+                          key={idx}
+                          className="group relative bg-white/80 backdrop-blur-xl border border-pink-100/90 rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col justify-between overflow-hidden"
+                        >
+                          <div className="w-8 h-8 rounded-xl bg-pink-50 border border-pink-100 flex items-center justify-center mb-2.5">
+                            {feat.icon}
+                          </div>
                           <div className="space-y-1.5 relative z-10">
                             <input
                               type="text"
@@ -659,31 +692,72 @@ export default function Home() {
                               className="w-full text-[11px] font-brand text-neutral-600 bg-pink-50/90 ring-1 ring-pink-400 rounded px-2 py-1 outline-none"
                             />
                           </div>
-                        ) : (
-                          <div className="relative z-10">
-                            <h3 className="font-brand font-bold text-xs sm:text-sm text-neutral-900 tracking-tight mb-0.5">
-                              {tVal}
-                            </h3>
-                            <p className="font-brand text-[11px] sm:text-xs text-neutral-500 leading-snug">
-                              {sVal}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="w-full relative z-20 py-3 bg-white/70 backdrop-blur-md border-y border-pink-100/80 overflow-hidden my-3 sm:my-6">
+                  <div className="flex w-max animate-marquee space-x-8 sm:space-x-12 select-none">
+                    {[1, 2].map((repeat) => (
+                      <div key={repeat} className="flex items-center space-x-8 sm:space-x-12 shrink-0">
+                        {[
+                          {
+                            titleKey: "feature1Title",
+                            subKey: "feature1Sub",
+                            defaultTitle: "Bespoke Artistry",
+                            defaultSub: "100% Hand-Painted in Studio",
+                          },
+                          {
+                            titleKey: "feature2Title",
+                            subKey: "feature2Sub",
+                            defaultTitle: "Salon-Grade Gel",
+                            defaultSub: "Reusable Luxury Soft Gel Tips",
+                          },
+                          {
+                            titleKey: "feature3Title",
+                            subKey: "feature3Sub",
+                            defaultTitle: "Custom Millimeter Fit",
+                            defaultSub: "Tailored to Your Exact Nail Beds",
+                          },
+                          {
+                            titleKey: "feature4Title",
+                            subKey: "feature4Sub",
+                            defaultTitle: "Complete Prep Kit",
+                            defaultSub: "Includes File, Buffer, Tabs & Glue",
+                          }
+                        ].map((feat, idx) => {
+                          const tVal = (homeContent as any)[feat.titleKey] || feat.defaultTitle;
+                          const sVal = (homeContent as any)[feat.subKey] || feat.defaultSub;
+                          return (
+                            <div key={idx} className="flex items-center gap-3">
+                              <span className="text-[#FF5C9D] text-xs">✦</span>
+                              <span className="font-brand font-bold text-xs sm:text-sm uppercase tracking-wider text-neutral-900">
+                                {tVal}
+                              </span>
+                              <span className="text-neutral-300 text-xs hidden sm:inline">·</span>
+                              <span className="font-brand text-[11px] sm:text-xs text-neutral-500 hidden sm:inline">
+                                {sVal}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-              {/* Sizing Kit Promo Banner (Sleek Nail Studio Glam) */}
+              {/* Sizing Kit Promo Banner (Lighter Studio Card) */}
               <div className="w-full px-4 sm:px-6 relative z-20 my-3 sm:my-8">
-                <div className="max-w-5xl mx-auto bg-gradient-to-br from-neutral-950 via-neutral-900 to-pink-950/60 border border-pink-500/30 rounded-2xl sm:rounded-3xl p-5 sm:p-8 shadow-xl shadow-pink-500/5 flex flex-col md:flex-row items-center justify-between gap-5 sm:gap-8 transform hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden">
-                  <div className="absolute -top-12 -right-12 w-48 h-48 bg-[#FF5C9D] rounded-full filter blur-[90px] opacity-20 pointer-events-none"></div>
+                <div className="max-w-5xl mx-auto bg-white/90 backdrop-blur-xl border border-pink-200/70 rounded-2xl sm:rounded-3xl p-5 sm:p-8 shadow-xl shadow-pink-500/5 flex flex-col md:flex-row items-center justify-between gap-5 sm:gap-8 transform hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden text-neutral-900">
+                  <div className="absolute -top-12 -right-12 w-48 h-48 bg-[#FF5C9D] rounded-full filter blur-[90px] opacity-15 pointer-events-none"></div>
                   
                   {editMode ? (
-                    <div className="w-full flex flex-col gap-2 relative z-10 text-white">
+                    <div className="w-full flex flex-col gap-2 relative z-10 text-neutral-900">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] uppercase font-brand font-bold text-pink-400">Eyebrow:</span>
+                        <span className="text-[10px] uppercase font-brand font-bold text-[#FF5C9D]">Eyebrow:</span>
                         <input 
                           type="text" 
                           value={homeContent.sizingEyebrow || "Guaranteed Flawless Fit"} 
@@ -692,7 +766,7 @@ export default function Home() {
                             const vendorUid = VENDOR_UID; 
                             await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { sizingEyebrow: e.target.value }, { merge: true }); 
                           }} 
-                          className="relative z-50 ring-2 ring-pink-500 rounded px-2 py-1 bg-pink-950/70 font-brand font-bold text-[11px] uppercase tracking-widest text-[#FF5C9D] flex-1 outline-none"
+                          className="relative z-50 ring-2 ring-pink-400 rounded px-2 py-1 bg-pink-50 font-brand font-bold text-[11px] uppercase tracking-widest text-[#FF5C9D] flex-1 outline-none"
                         />
                       </div>
                       <input 
@@ -703,7 +777,7 @@ export default function Home() {
                           const vendorUid = VENDOR_UID; 
                           await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { sizingTitle: e.target.value }, { merge: true }); 
                         }} 
-                        className="relative z-50 ring-2 ring-pink-500 rounded p-1.5 bg-pink-950/70 font-brand font-bold text-xl sm:text-2xl tracking-tight text-white w-full outline-none"
+                        className="relative z-50 ring-2 ring-pink-400 rounded p-1.5 bg-pink-50 font-brand font-bold text-xl sm:text-2xl tracking-tight text-neutral-900 w-full outline-none"
                       />
                       <textarea 
                         value={homeContent.sizingSubtitle || "Don't guess your size! Order a sizing kit first to guarantee a flawless, salon-perfect fit for your custom sets."} 
@@ -712,11 +786,11 @@ export default function Home() {
                           const vendorUid = VENDOR_UID; 
                           await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { sizingSubtitle: e.target.value }, { merge: true }); 
                         }} 
-                        className="relative z-50 ring-2 ring-pink-500 rounded p-1.5 bg-pink-950/70 font-brand text-neutral-300 font-normal text-xs sm:text-sm w-full resize-none outline-none"
+                        className="relative z-50 ring-2 ring-pink-400 rounded p-1.5 bg-pink-50 font-brand text-neutral-600 font-normal text-xs sm:text-sm w-full resize-none outline-none"
                         rows={2}
                       />
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] uppercase font-brand font-bold text-neutral-400">Button:</span>
+                        <span className="text-[10px] uppercase font-brand font-bold text-neutral-500">Button:</span>
                         <input 
                           type="text" 
                           value={homeContent.sizingButtonText || "Order Kit (€5)"} 
@@ -725,19 +799,19 @@ export default function Home() {
                             const vendorUid = VENDOR_UID; 
                             await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { sizingButtonText: e.target.value }, { merge: true }); 
                           }} 
-                          className="relative z-50 ring-2 ring-pink-500 rounded p-1 bg-pink-950/70 font-brand text-xs font-bold text-white w-36 text-center outline-none"
+                          className="relative z-50 ring-2 ring-pink-400 rounded p-1 bg-pink-50 font-brand text-xs font-bold text-neutral-900 w-36 text-center outline-none"
                         />
                       </div>
                     </div>
                   ) : (
-                    <div className="text-white text-center md:text-left relative z-10">
+                    <div className="text-neutral-900 text-center md:text-left relative z-10">
                       <span className="text-[#FF5C9D] font-brand font-bold text-[11px] uppercase tracking-widest block mb-1">
                         {homeContent.sizingEyebrow || "Guaranteed Flawless Fit"}
                       </span>
-                      <h2 className="font-brand font-bold text-xl sm:text-2xl lg:text-3xl tracking-tight mb-1.5 text-white">
+                      <h2 className="font-brand font-bold text-xl sm:text-2xl lg:text-3xl tracking-tight mb-1.5 text-neutral-900">
                         {homeContent.sizingTitle || "New to UnHolly Nails?"}
                       </h2>
-                      <p className="font-brand text-neutral-300 font-normal text-xs sm:text-sm max-w-lg leading-relaxed">
+                      <p className="font-brand text-neutral-600 font-normal text-xs sm:text-sm max-w-lg leading-relaxed">
                         {homeContent.sizingSubtitle || "Don't guess your size! Order a sizing kit first to guarantee a flawless, salon-perfect fit for your custom sets."}
                       </p>
                     </div>
@@ -771,7 +845,7 @@ export default function Home() {
                     >
                       {homeContent.sizingButtonText || "Order Kit (€5)"}
                     </button>
-                    <Link href="/guides" className="bg-white/10 hover:bg-white/20 text-white border border-white/20 px-6 sm:px-8 py-3 sm:py-3.5 rounded-full font-brand font-bold text-xs uppercase tracking-wider transition-colors whitespace-nowrap text-center flex-1 sm:flex-initial">
+                    <Link href="/guides" className="bg-white/80 hover:bg-pink-50 text-neutral-800 border border-pink-200 px-6 sm:px-8 py-3 sm:py-3.5 rounded-full font-brand font-bold text-xs uppercase tracking-wider transition-colors whitespace-nowrap text-center flex-1 sm:flex-initial shadow-sm">
                       How to measure →
                     </Link>
                   </div>
@@ -839,7 +913,39 @@ export default function Home() {
                       )}
                     </div>
                     
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-8">
+                    <div className="relative">
+                      {/* Mobile Scroll Arrow Indicator (Right) */}
+                      {canScrollRight && (
+                        <button
+                          type="button"
+                          onClick={() => scrollFeatured('right')}
+                          aria-label="Scroll collections right"
+                          className="sm:hidden absolute right-1 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-white/95 backdrop-blur-md border border-pink-200/90 text-neutral-800 shadow-xl flex items-center justify-center active:scale-90 transition-all hover:bg-white"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 text-[#FF5C9D]">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                          </svg>
+                        </button>
+                      )}
+
+                      {/* Mobile Scroll Arrow Indicator (Left) */}
+                      {canScrollLeft && (
+                        <button
+                          type="button"
+                          onClick={() => scrollFeatured('left')}
+                          aria-label="Scroll collections left"
+                          className="sm:hidden absolute left-1 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-white/95 backdrop-blur-md border border-pink-200/90 text-neutral-800 shadow-xl flex items-center justify-center active:scale-90 transition-all hover:bg-white"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 text-[#FF5C9D]">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                          </svg>
+                        </button>
+                      )}
+
+                      <div 
+                        ref={featuredScrollRef}
+                        className="flex overflow-x-auto sm:grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 hide-scrollbar snap-x snap-mandatory pb-2 -mx-4 px-4 sm:mx-0 sm:px-0"
+                      >
                       {(ribbonCollections.length > 0 
                         ? ribbonCollections 
                         : allCollections.filter(c => c.tag && c.tag !== '--ribbon_layout--' && c.tag !== 'all').slice(0, 3).map(c => ({
@@ -874,7 +980,7 @@ export default function Home() {
                         const descColor = (custom && collection.cardDescriptionColor) ? collection.cardDescriptionColor : (collection.descriptionColor || defaultDescColor);
 
                         return (
-                          <div key={collection.tag} className="relative group">
+                          <div key={collection.tag} className="relative group shrink-0 w-[82vw] sm:w-auto snap-center">
                             {editMode && adminUser && (
                               <div className="absolute top-3 left-3 z-20 flex gap-1">
                                 <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveRibbon(index, -1); }} className="bg-black text-white p-2 rounded-full hover:bg-neutral-800 shadow-md transition-transform hover:scale-110 disabled:opacity-50" disabled={index === 0} title="Move Left">
@@ -948,7 +1054,7 @@ export default function Home() {
                         {editMode && adminUser && (
                           <div 
                             onClick={() => setShowFeaturePicker(true)}
-                            className="h-64 sm:h-80 lg:h-96 rounded-2xl sm:rounded-[2rem] border-2 border-dashed border-pink-300 hover:border-pink-500 bg-pink-50/50 hover:bg-pink-100 cursor-pointer flex flex-col items-center justify-center transition-all group shadow-sm hover:shadow-md"
+                            className="shrink-0 w-[82vw] sm:w-auto snap-center h-64 sm:h-80 lg:h-96 rounded-2xl sm:rounded-[2rem] border-2 border-dashed border-pink-300 hover:border-pink-500 bg-pink-50/50 hover:bg-pink-100 cursor-pointer flex flex-col items-center justify-center transition-all group shadow-sm hover:shadow-md"
                           >
                             <div className="w-12 h-12 sm:w-16 sm:h-16 bg-white rounded-full flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform mb-3 sm:mb-4">
                               <span className="text-2xl sm:text-3xl text-pink-500 font-light">+</span>
@@ -956,6 +1062,7 @@ export default function Home() {
                             <span className="font-bold text-pink-500 uppercase tracking-widest text-xs sm:text-sm text-center px-4">Add Featured<br/>Collection</span>
                           </div>
                         )}
+                      </div>
                     </div>
                   </div>
                 </div>
