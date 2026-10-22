@@ -598,7 +598,7 @@ export default function Home() {
                     </>
                   )}
                   <div className="flex flex-wrap gap-3 sm:gap-4 justify-center">
-                    <Link href="/collections/all" className="bg-[#FF5C9D] text-white px-7 sm:px-9 py-3 sm:py-3.5 rounded-full font-brand font-bold text-xs tracking-wider uppercase hover:bg-pink-600 hover:scale-105 transition-all shadow-md shadow-pink-500/25">Shop All Designs</Link>
+                    <Link href="/collections/all" className="bg-neutral-900 text-white px-7 sm:px-9 py-3 sm:py-3.5 rounded-full font-brand font-bold text-xs hover:bg-[#FF5C9D] uppercase tracking-wider transition-all hover:scale-105 shadow-lg shadow-neutral-900/10 hover:shadow-pink-500/20">Shop All Designs</Link>
                     <Link href="/collections/special-offers" className="bg-white/90 backdrop-blur-sm border border-pink-200 text-neutral-800 px-7 sm:px-9 py-3 sm:py-3.5 rounded-full font-brand font-bold text-xs tracking-wider uppercase hover:border-[#FF5C9D] hover:text-[#FF5C9D] hover:scale-105 transition-all shadow-sm">View Promos</Link>
                   </div>
                 </div>
@@ -841,7 +841,7 @@ export default function Home() {
                         }
                         addToCart(kit, kit.defaultShape || 'Almond', 'N/A', kit.defaultLength || 'M', 1);
                       }} 
-                      className="bg-[#FF5C9D] text-white px-6 sm:px-8 py-3 sm:py-3.5 rounded-full font-brand font-bold text-xs uppercase tracking-wider hover:bg-pink-600 transition-colors shadow-md shadow-pink-500/30 whitespace-nowrap flex-1 sm:flex-initial text-center"
+                      className="bg-neutral-900 text-white px-6 sm:px-8 py-3 sm:py-3.5 rounded-full font-brand font-bold text-xs hover:bg-[#FF5C9D] uppercase tracking-wider transition-all hover:scale-105 shadow-lg shadow-neutral-900/10 hover:shadow-pink-500/20 whitespace-nowrap flex-1 sm:flex-initial text-center"
                     >
                       {homeContent.sizingButtonText || "Order Kit (€5)"}
                     </button>
@@ -1311,18 +1311,18 @@ export default function Home() {
                       </Link>
 
                       {/* Card 3: UnHollyNails Club */}
-                      <Link href="/club" className="group bg-gradient-to-br from-neutral-950 via-neutral-900 to-pink-950/60 rounded-2xl sm:rounded-3xl p-6 sm:p-7 shadow-lg border border-pink-500/30 text-white hover:shadow-xl transition-all duration-300 flex flex-col justify-between">
+                      <Link href="/club" className="group bg-white/80 backdrop-blur-md rounded-2xl sm:rounded-3xl p-6 sm:p-7 shadow-sm border border-pink-100/80 hover:border-pink-300 hover:shadow-lg transition-all duration-300 flex flex-col justify-between">
                         <div>
                           <div className="flex items-center justify-between mb-4">
-                            <span className="bg-[#FF5C9D] text-white text-[10px] font-brand font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                            <span className="bg-pink-100 text-pink-700 text-[10px] font-brand font-bold px-3 py-1 rounded-full uppercase tracking-wider">
                               Free Birthday Set
                             </span>
-                            <span className="font-brand font-bold text-xs text-pink-300">Club Perks</span>
+                            <span className="font-brand font-bold text-xs text-[#FF5C9D]">Club Perks</span>
                           </div>
-                          <h3 className="font-brand font-bold text-xl text-white group-hover:text-pink-300 transition-colors mb-2">
+                          <h3 className="font-brand font-bold text-xl text-neutral-900 group-hover:text-[#FF5C9D] transition-colors mb-2">
                             UnHollyNails Club!
                           </h3>
-                          <p className="font-brand text-xs text-neutral-300 leading-relaxed mb-4">
+                          <p className="font-brand text-xs text-neutral-600 leading-relaxed mb-4">
                             Every client with an account is a member! Earn digital stamps on your loyalty card, unlock free delivery & bespoke gifts, and celebrate with birthday treats.
                           </p>
                         </div>
