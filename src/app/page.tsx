@@ -749,108 +749,6 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Sizing Kit Promo Banner (Lighter Studio Card) */}
-              <div className="w-full px-4 sm:px-6 relative z-20 my-3 sm:my-8">
-                <div className="max-w-5xl mx-auto bg-white/90 backdrop-blur-xl border border-pink-200/70 rounded-2xl sm:rounded-3xl p-5 sm:p-8 shadow-xl shadow-pink-500/5 flex flex-col md:flex-row items-center justify-between gap-5 sm:gap-8 transform hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden text-neutral-900">
-                  <div className="absolute -top-12 -right-12 w-48 h-48 bg-[#FF5C9D] rounded-full filter blur-[90px] opacity-15 pointer-events-none"></div>
-                  
-                  {editMode ? (
-                    <div className="w-full flex flex-col gap-2 relative z-10 text-neutral-900">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] uppercase font-brand font-bold text-[#FF5C9D]">Eyebrow:</span>
-                        <input 
-                          type="text" 
-                          value={homeContent.sizingEyebrow || "Guaranteed Flawless Fit"} 
-                          onChange={e => setHomeContent(prev => ({...prev, sizingEyebrow: e.target.value}))} 
-                          onBlur={async (e) => { 
-                            const vendorUid = VENDOR_UID; 
-                            await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { sizingEyebrow: e.target.value }, { merge: true }); 
-                          }} 
-                          className="relative z-50 ring-2 ring-pink-400 rounded px-2 py-1 bg-pink-50 font-brand font-bold text-[11px] uppercase tracking-widest text-[#FF5C9D] flex-1 outline-none"
-                        />
-                      </div>
-                      <input 
-                        type="text" 
-                        value={homeContent.sizingTitle || "New to UnHolly Nails?"} 
-                        onChange={e => setHomeContent(prev => ({...prev, sizingTitle: e.target.value}))} 
-                        onBlur={async (e) => { 
-                          const vendorUid = VENDOR_UID; 
-                          await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { sizingTitle: e.target.value }, { merge: true }); 
-                        }} 
-                        className="relative z-50 ring-2 ring-pink-400 rounded p-1.5 bg-pink-50 font-brand font-bold text-xl sm:text-2xl tracking-tight text-neutral-900 w-full outline-none"
-                      />
-                      <textarea 
-                        value={homeContent.sizingSubtitle || "Don't guess your size! Order a sizing kit first to guarantee a flawless, salon-perfect fit for your custom sets."} 
-                        onChange={e => setHomeContent(prev => ({...prev, sizingSubtitle: e.target.value}))} 
-                        onBlur={async (e) => { 
-                          const vendorUid = VENDOR_UID; 
-                          await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { sizingSubtitle: e.target.value }, { merge: true }); 
-                        }} 
-                        className="relative z-50 ring-2 ring-pink-400 rounded p-1.5 bg-pink-50 font-brand text-neutral-600 font-normal text-xs sm:text-sm w-full resize-none outline-none"
-                        rows={2}
-                      />
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] uppercase font-brand font-bold text-neutral-500">Button:</span>
-                        <input 
-                          type="text" 
-                          value={homeContent.sizingButtonText || "Order Kit (€5)"} 
-                          onChange={e => setHomeContent(prev => ({...prev, sizingButtonText: e.target.value}))} 
-                          onBlur={async (e) => { 
-                            const vendorUid = VENDOR_UID; 
-                            await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { sizingButtonText: e.target.value }, { merge: true }); 
-                          }} 
-                          className="relative z-50 ring-2 ring-pink-400 rounded p-1 bg-pink-50 font-brand text-xs font-bold text-neutral-900 w-36 text-center outline-none"
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-neutral-900 text-center md:text-left relative z-10">
-                      <span className="text-[#FF5C9D] font-brand font-bold text-[11px] uppercase tracking-widest block mb-1">
-                        {homeContent.sizingEyebrow || "Guaranteed Flawless Fit"}
-                      </span>
-                      <h2 className="font-brand font-bold text-xl sm:text-2xl lg:text-3xl tracking-tight mb-1.5 text-neutral-900">
-                        {homeContent.sizingTitle || "New to UnHolly Nails?"}
-                      </h2>
-                      <p className="font-brand text-neutral-600 font-normal text-xs sm:text-sm max-w-lg leading-relaxed">
-                        {homeContent.sizingSubtitle || "Don't guess your size! Order a sizing kit first to guarantee a flawless, salon-perfect fit for your custom sets."}
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="flex flex-row gap-3 shrink-0 w-full sm:w-auto justify-center relative z-10">
-                    <button 
-                      onClick={() => {
-                        let kit = products.find(p => p.name.toLowerCase().includes('sizing kit') || p.name.toLowerCase().includes('sizing'));
-                        if (!kit) {
-                          kit = {
-                            id: "placeholder-sizing-kit",
-                            docPath: "placeholder/sizing-kit",
-                            name: "Sizing Kit",
-                            basePrice: 5.00,
-                            priceOnAsk: false,
-                            imagePath: "/logo_cropped.png",
-                            additionalImages: [],
-                            description: "Sizing kit to guarantee a flawless fit.",
-                            category: "Accessories",
-                            tags: [],
-                            isForSale: true,
-                            isPromo: false,
-                            syncId: "sizing-kit",
-                            type: "Accessories"
-                          } as Product;
-                        }
-                        addToCart(kit, kit.defaultShape || 'Almond', 'N/A', kit.defaultLength || 'M', 1);
-                      }} 
-                      className="bg-neutral-900 text-white px-6 sm:px-8 py-3 sm:py-3.5 rounded-full font-brand font-bold text-xs hover:bg-[#FF5C9D] uppercase tracking-wider transition-all hover:scale-105 shadow-lg shadow-neutral-900/10 hover:shadow-pink-500/20 whitespace-nowrap flex-1 sm:flex-initial text-center"
-                    >
-                      {homeContent.sizingButtonText || "Order Kit (€5)"}
-                    </button>
-                    <Link href="/guides" className="bg-white/80 hover:bg-pink-50 text-neutral-800 border border-pink-200 px-6 sm:px-8 py-3 sm:py-3.5 rounded-full font-brand font-bold text-xs uppercase tracking-wider transition-colors whitespace-nowrap text-center flex-1 sm:flex-initial shadow-sm">
-                      How to measure →
-                    </Link>
-                  </div>
-                </div>
-              </div>
 
               {/* Section Divider */}
               <div className="max-w-xs mx-auto h-px bg-gradient-to-r from-transparent via-pink-300 to-transparent my-2 sm:my-4"></div>
@@ -1068,8 +966,111 @@ export default function Home() {
                 </div>
               )}
 
+              {/* Sizing Kit Promo Banner (Lighter Studio Card) */}
+              <div className="w-full px-4 sm:px-6 relative z-20 my-3 sm:my-8">
+                <div className="max-w-5xl mx-auto bg-white/90 backdrop-blur-xl border border-pink-200/70 rounded-2xl sm:rounded-3xl p-5 sm:p-8 shadow-xl shadow-pink-500/5 flex flex-col md:flex-row items-center justify-between gap-5 sm:gap-8 transform hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden text-neutral-900">
+                  <div className="absolute -top-12 -right-12 w-48 h-48 bg-[#FF5C9D] rounded-full filter blur-[90px] opacity-15 pointer-events-none"></div>
+                  
+                  {editMode ? (
+                    <div className="w-full flex flex-col gap-2 relative z-10 text-neutral-900">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] uppercase font-brand font-bold text-[#FF5C9D]">Eyebrow:</span>
+                        <input 
+                          type="text" 
+                          value={homeContent.sizingEyebrow || "Guaranteed Flawless Fit"} 
+                          onChange={e => setHomeContent(prev => ({...prev, sizingEyebrow: e.target.value}))} 
+                          onBlur={async (e) => { 
+                            const vendorUid = VENDOR_UID; 
+                            await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { sizingEyebrow: e.target.value }, { merge: true }); 
+                          }} 
+                          className="relative z-50 ring-2 ring-pink-400 rounded px-2 py-1 bg-pink-50 font-brand font-bold text-[11px] uppercase tracking-widest text-[#FF5C9D] flex-1 outline-none"
+                        />
+                      </div>
+                      <input 
+                        type="text" 
+                        value={homeContent.sizingTitle || "New to UnHolly Nails?"} 
+                        onChange={e => setHomeContent(prev => ({...prev, sizingTitle: e.target.value}))} 
+                        onBlur={async (e) => { 
+                          const vendorUid = VENDOR_UID; 
+                          await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { sizingTitle: e.target.value }, { merge: true }); 
+                        }} 
+                        className="relative z-50 ring-2 ring-pink-400 rounded p-1.5 bg-pink-50 font-brand font-bold text-xl sm:text-2xl tracking-tight text-neutral-900 w-full outline-none"
+                      />
+                      <textarea 
+                        value={homeContent.sizingSubtitle || "Don't guess your size! Order a sizing kit first to guarantee a flawless, salon-perfect fit for your custom sets."} 
+                        onChange={e => setHomeContent(prev => ({...prev, sizingSubtitle: e.target.value}))} 
+                        onBlur={async (e) => { 
+                          const vendorUid = VENDOR_UID; 
+                          await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { sizingSubtitle: e.target.value }, { merge: true }); 
+                        }} 
+                        className="relative z-50 ring-2 ring-pink-400 rounded p-1.5 bg-pink-50 font-brand text-neutral-600 font-normal text-xs sm:text-sm w-full resize-none outline-none"
+                        rows={2}
+                      />
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px] uppercase font-brand font-bold text-neutral-500">Button:</span>
+                        <input 
+                          type="text" 
+                          value={homeContent.sizingButtonText || "Order Kit (€5)"} 
+                          onChange={e => setHomeContent(prev => ({...prev, sizingButtonText: e.target.value}))} 
+                          onBlur={async (e) => { 
+                            const vendorUid = VENDOR_UID; 
+                            await setDoc(doc(db, "users", vendorUid, "store_settings", "home_content"), { sizingButtonText: e.target.value }, { merge: true }); 
+                          }} 
+                          className="relative z-50 ring-2 ring-pink-400 rounded p-1 bg-pink-50 font-brand text-xs font-bold text-neutral-900 w-36 text-center outline-none"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-neutral-900 text-center md:text-left relative z-10">
+                      <span className="text-[#FF5C9D] font-brand font-bold text-[11px] uppercase tracking-widest block mb-1">
+                        {homeContent.sizingEyebrow || "Guaranteed Flawless Fit"}
+                      </span>
+                      <h2 className="font-brand font-bold text-xl sm:text-2xl lg:text-3xl tracking-tight mb-1.5 text-neutral-900">
+                        {homeContent.sizingTitle || "New to UnHolly Nails?"}
+                      </h2>
+                      <p className="font-brand text-neutral-600 font-normal text-xs sm:text-sm max-w-lg leading-relaxed">
+                        {homeContent.sizingSubtitle || "Don't guess your size! Order a sizing kit first to guarantee a flawless, salon-perfect fit for your custom sets."}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex flex-row gap-3 shrink-0 w-full sm:w-auto justify-center relative z-10">
+                    <button 
+                      onClick={() => {
+                        let kit = products.find(p => p.name.toLowerCase().includes('sizing kit') || p.name.toLowerCase().includes('sizing'));
+                        if (!kit) {
+                          kit = {
+                            id: "placeholder-sizing-kit",
+                            docPath: "placeholder/sizing-kit",
+                            name: "Sizing Kit",
+                            basePrice: 5.00,
+                            priceOnAsk: false,
+                            imagePath: "/logo_cropped.png",
+                            additionalImages: [],
+                            description: "Sizing kit to guarantee a flawless fit.",
+                            category: "Accessories",
+                            tags: [],
+                            isForSale: true,
+                            isPromo: false,
+                            syncId: "sizing-kit",
+                            type: "Accessories"
+                          } as Product;
+                        }
+                        addToCart(kit, kit.defaultShape || 'Almond', 'N/A', kit.defaultLength || 'M', 1);
+                      }} 
+                      className="bg-neutral-900 text-white px-6 sm:px-8 py-3 sm:py-3.5 rounded-full font-brand font-bold text-xs hover:bg-[#FF5C9D] uppercase tracking-wider transition-all hover:scale-105 shadow-lg shadow-neutral-900/10 hover:shadow-pink-500/20 whitespace-nowrap flex-1 sm:flex-initial text-center"
+                    >
+                      {homeContent.sizingButtonText || "Order Kit (€5)"}
+                    </button>
+                    <Link href="/guides" className="bg-white/80 hover:bg-pink-50 text-neutral-800 border border-pink-200 px-6 sm:px-8 py-3 sm:py-3.5 rounded-full font-brand font-bold text-xs uppercase tracking-wider transition-colors whitespace-nowrap text-center flex-1 sm:flex-initial shadow-sm">
+                      How to measure →
+                    </Link>
+                  </div>
+                </div>
+              </div>
+
               {/* Section Divider */}
-              <div className="max-w-xs mx-auto h-px bg-gradient-to-r from-transparent via-pink-300 to-transparent"></div>
+              <div className="max-w-xs mx-auto h-px bg-gradient-to-r from-transparent via-pink-300 to-transparent my-2 sm:my-4"></div>
 
               {/* New Arrivals */}
                 {products.length > 0 && (
