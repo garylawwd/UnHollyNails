@@ -1655,10 +1655,25 @@ export default function Home() {
                                   cardDescriptionColor: '#d4d4d4',
                                   cardThemeMode: 'dark'
                                 }))}
-                                className="col-span-2 flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
+                                className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
                               >
                                 <span className="w-5 h-5 rounded-full bg-neutral-900 inline-block shrink-0"></span>
                                 <span>Charcoal Luxe</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditData((p: any) => ({
+                                  ...p,
+                                  cardOmbreStart: '#312e81',
+                                  cardOmbreEnd: '#09090b',
+                                  cardHeaderColor: '#ffffff',
+                                  cardDescriptionColor: '#e0e7ff',
+                                  cardThemeMode: 'dark'
+                                }))}
+                                className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
+                              >
+                                <span className="w-5 h-5 rounded-full bg-gradient-to-r from-indigo-800 to-black inline-block shrink-0 shadow-inner"></span>
+                                <span>Midnight Indigo</span>
                               </button>
                             </div>
                           </div>
@@ -1856,10 +1871,25 @@ export default function Home() {
                               descriptionColor: '#d4d4d4',
                               themeMode: 'dark'
                             }))}
-                            className="col-span-2 flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
+                            className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
                           >
                             <span className="w-5 h-5 rounded-full bg-neutral-900 inline-block shrink-0"></span>
                             <span>Charcoal Luxe</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditData((p: any) => ({
+                              ...p,
+                              ombreStart: '#312e81',
+                              ombreEnd: '#09090b',
+                              headerColor: '#ffffff',
+                              descriptionColor: '#e0e7ff',
+                              themeMode: 'dark'
+                            }))}
+                            className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
+                          >
+                            <span className="w-5 h-5 rounded-full bg-gradient-to-r from-indigo-800 to-black inline-block shrink-0 shadow-inner"></span>
+                            <span>Midnight Indigo</span>
                           </button>
                         </div>
                       </div>

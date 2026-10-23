@@ -531,12 +531,12 @@ function CollectionPageContent() {
       <div className="relative z-10 flex flex-col min-h-screen">
         <div className="pt-16 pb-6 sm:pt-28 sm:pb-12 text-center px-4 relative mt-4">
           {adminUser && editMode && (
-              <button 
-                onClick={openInlineEditor}
-              className={`absolute top-4 right-6 sm:top-12 sm:right-8 bg-black/70 text-white p-3 rounded-full hover:bg-black transition-all shadow-lg z-30 group ${editMode ? 'ring-2 ring-pink-500 animate-pulse' : ''}`}
-              title="Theme Collection"
+            <button 
+              onClick={openInlineEditor}
+              className={`absolute top-4 right-4 sm:top-8 sm:right-8 bg-neutral-900/90 text-white p-3 rounded-full hover:bg-neutral-900 transition-all shadow-xl z-40 group ring-2 ring-pink-500/80 hover:scale-105 ${editMode ? 'animate-pulse' : ''}`}
+              title="Theme & Colors"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 group-hover:scale-110 transition-transform"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-pink-400 group-hover:scale-110 transition-transform"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
             </button>
           )}
           <div className="flex flex-col items-center gap-4 relative z-10 w-full max-w-4xl mx-auto">
@@ -562,16 +562,6 @@ function CollectionPageContent() {
                   {collectionInfo?.title || tag}
                 </h1>
               )}
-              {editMode && (
-                <div className="absolute -right-2 sm:-right-14 top-0 sm:top-1/2 sm:-translate-y-1/2 flex items-center justify-center bg-white rounded-full p-2 shadow-xl opacity-100 transition-opacity z-[60]">
-                  <input type="color" value={collectionInfo?.headerColor || (isThemeLight ? '#171717' : '#ffffff')} onChange={async (e) => {
-                    setCollectionInfo((prev: any) => ({...prev, headerColor: e.target.value}));
-                    if(!adminUser) return;
-                    const vendorUid = VENDOR_UID;
-                    await setDoc(doc(db, "users", vendorUid, "collection_settings", canonicalTag), { headerColor: e.target.value }, { merge: true });
-                  }} className="w-8 h-8 rounded cursor-pointer border-0 p-0" title="Title Color" />
-                </div>
-              )}
             </div>
 
             {(collectionInfo?.description || editMode) && (
@@ -596,16 +586,21 @@ function CollectionPageContent() {
                     style={{ color: collectionInfo?.descriptionColor || (isThemeLight ? '#4b5563' : '#e5e5e5') }}
                   >{collectionInfo?.description}</p>
                 )}
-                {editMode && (
-                  <div className="absolute -right-2 sm:-right-14 top-0 sm:top-1/2 sm:-translate-y-1/2 flex items-center justify-center bg-white rounded-full p-2 shadow-xl opacity-100 transition-opacity z-[60]">
-                    <input type="color" value={collectionInfo?.descriptionColor || (isThemeLight ? '#4b5563' : '#e5e5e5')} onChange={async (e) => {
-                      setCollectionInfo((prev: any) => ({...prev, descriptionColor: e.target.value}));
-                      if(!adminUser) return;
-                      const vendorUid = VENDOR_UID;
-                      await setDoc(doc(db, "users", vendorUid, "collection_settings", canonicalTag), { descriptionColor: e.target.value }, { merge: true });
-                    }} className="w-8 h-8 rounded cursor-pointer border-0 p-0" title="Description Color" />
-                  </div>
-                )}
+              </div>
+            )}
+
+            {adminUser && editMode && (
+              <div className="mt-2 flex items-center justify-center gap-3">
+                <button 
+                  type="button"
+                  onClick={openInlineEditor}
+                  className="inline-flex items-center gap-2 bg-neutral-900 text-white hover:bg-[#FF5C9D] px-5 py-2 rounded-full font-brand font-bold text-xs uppercase tracking-wider transition-all shadow-lg hover:scale-105 cursor-pointer z-30"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-pink-400">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42" />
+                  </svg>
+                  <span>Theme & Page Colors</span>
+                </button>
               </div>
             )}
           </div>
@@ -975,7 +970,7 @@ function CollectionPageContent() {
                 {/* Quick Presets */}
                 <div className="space-y-1.5">
                   <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider block">Quick Presets</span>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
                       onClick={() => setEditData((p: any) => ({
@@ -1051,6 +1046,62 @@ function CollectionPageContent() {
                       <span className="w-5 h-5 rounded-full bg-neutral-900 inline-block shrink-0"></span>
                       <span>Charcoal Luxe</span>
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditData((p: any) => ({
+                        ...p,
+                        ombreStart: '#312e81',
+                        ombreEnd: '#09090b',
+                        headerColor: '#ffffff',
+                        descriptionColor: '#e0e7ff',
+                        themeMode: 'dark'
+                      }))}
+                      className="flex items-center gap-2 p-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-xs font-bold text-neutral-800 transition shadow-sm text-left"
+                    >
+                      <span className="w-5 h-5 rounded-full bg-gradient-to-r from-indigo-800 to-black inline-block shrink-0 shadow-inner"></span>
+                      <span>Midnight Indigo</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Text & Header Colors */}
+                <div className="mt-3 pt-3 border-t border-neutral-100">
+                  <span className="text-[11px] font-bold text-neutral-500 uppercase tracking-wider block mb-2">Text & Header Colors</span>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-[11px] font-bold text-neutral-600 mb-1">Title Color</label>
+                      <div className="flex items-center gap-2 border border-neutral-200 rounded-xl p-2 bg-neutral-50">
+                        <input
+                          type="color"
+                          value={editData.headerColor || (isThemeLight ? '#171717' : '#ffffff')}
+                          onChange={e => setEditData((p: any) => ({ ...p, headerColor: e.target.value }))}
+                          className="w-7 h-7 rounded cursor-pointer border-0 p-0 bg-transparent shrink-0"
+                        />
+                        <input
+                          type="text"
+                          value={editData.headerColor || (isThemeLight ? '#171717' : '#ffffff')}
+                          onChange={e => setEditData((p: any) => ({ ...p, headerColor: e.target.value }))}
+                          className="w-full text-xs font-mono font-medium uppercase bg-transparent outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-neutral-600 mb-1">Description Color</label>
+                      <div className="flex items-center gap-2 border border-neutral-200 rounded-xl p-2 bg-neutral-50">
+                        <input
+                          type="color"
+                          value={editData.descriptionColor || (isThemeLight ? '#4b5563' : '#e5e5e5')}
+                          onChange={e => setEditData((p: any) => ({ ...p, descriptionColor: e.target.value }))}
+                          className="w-7 h-7 rounded cursor-pointer border-0 p-0 bg-transparent shrink-0"
+                        />
+                        <input
+                          type="text"
+                          value={editData.descriptionColor || (isThemeLight ? '#4b5563' : '#e5e5e5')}
+                          onChange={e => setEditData((p: any) => ({ ...p, descriptionColor: e.target.value }))}
+                          className="w-full text-xs font-mono font-medium uppercase bg-transparent outline-none"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
 
