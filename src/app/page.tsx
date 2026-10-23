@@ -112,6 +112,9 @@ export default function Home() {
 
     const [allCollections, setAllCollections] = useState<any[]>([]);
   const [showFeaturePicker, setShowFeaturePicker] = useState(false);
+  const [newCollectionName, setNewCollectionName] = useState("");
+  const [creatingCollection, setCreatingCollection] = useState(false);
+  const [collectionSearchQuery, setCollectionSearchQuery] = useState("");
   const [pickerSlotIndex, setPickerSlotIndex] = useState<number | null>(null);
   const [confirmRemoveSlot, setConfirmRemoveSlot] = useState<number | null>(null);
   const [showEditor, setShowEditor] = useState(false);
@@ -367,8 +370,49 @@ export default function Home() {
       });
 
       const uniqueProducts = Array.from(new Map(fetchedProducts.map(item => [item.id, item])).values());
-
       setProducts(uniqueProducts);
+
+      // Merge standard store tags and product tags into collMap for allCollections
+      const defaultStoreTags = ['sets', 'minis', 'keychains', 'earrings', 'accessories', 'basics', 'special-offers'];
+      defaultStoreTags.forEach(t => {
+        const lower = t.toLowerCase();
+        if (!collMap.has(lower)) {
+          collMap.set(lower, {
+            tag: lower,
+            title: lower.charAt(0).toUpperCase() + lower.slice(1),
+            description: `Shop our ${lower} collection`,
+            isFeatured: false,
+            ombreStart: "#fbcfe8",
+            ombreEnd: "#ffffff",
+            headerColor: "#171717",
+            descriptionColor: "#4b5563",
+            themeMode: "auto",
+          });
+        }
+      });
+
+      fetchedProducts.forEach(p => {
+        if (p.tags && Array.isArray(p.tags)) {
+          p.tags.forEach((t: string) => {
+            const clean = t.trim().toLowerCase();
+            if (clean && !collMap.has(clean) && clean !== '--ribbon_layout--') {
+              collMap.set(clean, {
+                tag: clean,
+                title: clean.charAt(0).toUpperCase() + clean.slice(1),
+                description: `Explore our ${clean} collection`,
+                isFeatured: false,
+                ombreStart: "#fbcfe8",
+                ombreEnd: "#ffffff",
+                headerColor: "#171717",
+                descriptionColor: "#4b5563",
+                themeMode: "auto",
+              });
+            }
+          });
+        }
+      });
+
+      setAllCollections(Array.from(collMap.values()));
     } catch (error) {
       console.error("Error fetching nail sets:", error);
     } finally {
@@ -456,6 +500,10 @@ export default function Home() {
   const featuredScrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
+  const featuredDragDistanceRef = useRef(0);
+  const isDraggingFeatured = useRef(false);
+  const startXFeatured = useRef(0);
+  const scrollLeftFeatured = useRef(0);
 
   const checkFeaturedScroll = useCallback(() => {
     if (featuredScrollRef.current) {
@@ -469,22 +517,124 @@ export default function Home() {
     const el = featuredScrollRef.current;
     if (!el) return;
     checkFeaturedScroll();
+    const t = setTimeout(checkFeaturedScroll, 150);
     el.addEventListener('scroll', checkFeaturedScroll, { passive: true });
     window.addEventListener('resize', checkFeaturedScroll);
     return () => {
+      clearTimeout(t);
       el.removeEventListener('scroll', checkFeaturedScroll);
       window.removeEventListener('resize', checkFeaturedScroll);
     };
   }, [checkFeaturedScroll, ribbonCollections, allCollections]);
 
+  const handleFeaturedMouseDown = (e: React.MouseEvent) => {
+    if (!featuredScrollRef.current) return;
+    isDraggingFeatured.current = true;
+    featuredDragDistanceRef.current = 0;
+    startXFeatured.current = e.pageX - featuredScrollRef.current.offsetLeft;
+    scrollLeftFeatured.current = featuredScrollRef.current.scrollLeft;
+  };
+
+  const handleFeaturedMouseMove = (e: React.MouseEvent) => {
+    if (!isDraggingFeatured.current || !featuredScrollRef.current) return;
+    const x = e.pageX - featuredScrollRef.current.offsetLeft;
+    const walk = x - startXFeatured.current;
+    featuredDragDistanceRef.current = Math.abs(walk);
+    if (Math.abs(walk) > 5) {
+      featuredScrollRef.current.scrollLeft = scrollLeftFeatured.current - walk;
+    }
+  };
+
+  const handleFeaturedMouseUp = () => {
+    isDraggingFeatured.current = false;
+  };
+
   const scrollFeatured = (direction: 'left' | 'right') => {
     if (featuredScrollRef.current) {
-      const scrollAmount = featuredScrollRef.current.clientWidth * 0.85;
+      const card = featuredScrollRef.current.firstElementChild as HTMLElement;
+      const scrollAmount = card ? (card.offsetWidth + 24) : (featuredScrollRef.current.clientWidth * 0.85);
       featuredScrollRef.current.scrollBy({
         left: direction === 'left' ? -scrollAmount : scrollAmount,
         behavior: 'smooth'
       });
     }
+  };
+
+  const availableToFeature = useMemo(() => {
+    const featuredTags = new Set(ribbonCollections.map((c: any) => c.tag?.toLowerCase()));
+    return allCollections.filter((c: any) => c.tag && c.tag !== '--ribbon_layout--' && c.tag !== 'all' && !featuredTags.has(c.tag?.toLowerCase()));
+  }, [allCollections, ribbonCollections]);
+
+  const filteredAvailable = useMemo(() => {
+    if (!collectionSearchQuery.trim()) return availableToFeature;
+    const q = collectionSearchQuery.toLowerCase();
+    return availableToFeature.filter((c: any) => 
+      (c.title || c.tag)?.toLowerCase().includes(q) || (c.tag || "")?.toLowerCase().includes(q) || (c.description || "")?.toLowerCase().includes(q)
+    );
+  }, [availableToFeature, collectionSearchQuery]);
+
+  const handleCreateAndFeatureCollection = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const name = newCollectionName.trim();
+    if (!name) return;
+
+    const tag = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    if (!tag) return;
+
+    setCreatingCollection(true);
+    try {
+      const vendorUid = VENDOR_UID;
+      const newCollData = {
+        tag: tag,
+        title: name,
+        description: `Explore our ${name} collection`,
+        backgroundImageUrl: "",
+        cardImageUrl: "",
+        isFeatured: true,
+        ombreStart: "#fbcfe8",
+        ombreEnd: "#ffffff",
+        bgScale: 100,
+        cardBgScale: 100,
+        headerColor: "#171717",
+        descriptionColor: "#4b5563",
+        themeMode: "auto",
+      };
+
+      await setDoc(doc(db, "users", vendorUid, "collection_settings", tag), newCollData, { merge: true });
+
+      const newRibbons = [...ribbonCollections.filter((c: any) => c.tag.toLowerCase() !== tag), newCollData];
+      setRibbonCollections(newRibbons as any);
+      setAllCollections((prev: any) => [...prev.filter((c: any) => c.tag.toLowerCase() !== tag), newCollData]);
+
+      await setDoc(doc(db, "users", vendorUid, "store_settings", "featured_order"), {
+        order: newRibbons.map((c: any) => c.tag)
+      }, { merge: true });
+
+      setNewCollectionName("");
+      setShowFeaturePicker(false);
+    } catch (err) {
+      console.error("Error creating featured collection:", err);
+    } finally {
+      setCreatingCollection(false);
+    }
+  };
+
+  const handleFeatureExistingCollection = async (c: any) => {
+    const vendorUid = VENDOR_UID;
+    const canonical = ['sets', 'minis', 'keychains', 'earrings', 'accessories', 'basics', 'special-offers', 'all'].includes(c.tag.toLowerCase()) ? c.tag.toLowerCase() : c.tag;
+    const updated = { ...c, tag: canonical, isFeatured: true };
+
+    await setDoc(doc(db, 'users', vendorUid, 'collection_settings', canonical), { isFeatured: true }, { merge: true });
+
+    const newRibbons = [...ribbonCollections.filter((item: any) => item.tag.toLowerCase() !== canonical), updated];
+    setRibbonCollections(newRibbons as any);
+    setAllCollections((prev: any) => prev.map((item: any) => item.tag.toLowerCase() === canonical ? updated : item));
+
+    await setDoc(doc(db, 'users', vendorUid, 'store_settings', 'featured_order'), {
+      order: newRibbons.map((item: any) => item.tag)
+    }, { merge: true });
+
+    setShowFeaturePicker(false);
   };
 
   const promoProducts = useMemo(() => products.filter(p => p.isPromo), [products]);
@@ -811,30 +961,30 @@ export default function Home() {
                       )}
                     </div>
                     
-                    <div className="relative">
-                      {/* Mobile Scroll Arrow Indicator (Right) */}
+                    <div className="relative group/carousel">
+                      {/* Scroll Arrow Indicator (Right) */}
                       {canScrollRight && (
                         <button
                           type="button"
                           onClick={() => scrollFeatured('right')}
                           aria-label="Scroll collections right"
-                          className="sm:hidden absolute right-1 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-white/95 backdrop-blur-md border border-pink-200/90 text-neutral-800 shadow-xl flex items-center justify-center active:scale-90 transition-all hover:bg-white"
+                          className="absolute -right-2 sm:-right-4 md:-right-6 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/95 backdrop-blur-md border border-pink-200/90 text-neutral-800 shadow-xl flex items-center justify-center active:scale-90 hover:scale-110 transition-all hover:bg-white"
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 text-[#FF5C9D]">
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 sm:w-6 sm:h-6 text-[#FF5C9D]">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                           </svg>
                         </button>
                       )}
 
-                      {/* Mobile Scroll Arrow Indicator (Left) */}
+                      {/* Scroll Arrow Indicator (Left) */}
                       {canScrollLeft && (
                         <button
                           type="button"
                           onClick={() => scrollFeatured('left')}
                           aria-label="Scroll collections left"
-                          className="sm:hidden absolute left-1 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full bg-white/95 backdrop-blur-md border border-pink-200/90 text-neutral-800 shadow-xl flex items-center justify-center active:scale-90 transition-all hover:bg-white"
+                          className="absolute -left-2 sm:-left-4 md:-left-6 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white/95 backdrop-blur-md border border-pink-200/90 text-neutral-800 shadow-xl flex items-center justify-center active:scale-90 hover:scale-110 transition-all hover:bg-white"
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 text-[#FF5C9D]">
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 sm:w-6 sm:h-6 text-[#FF5C9D]">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
                           </svg>
                         </button>
@@ -842,7 +992,11 @@ export default function Home() {
 
                       <div 
                         ref={featuredScrollRef}
-                        className="flex overflow-x-auto sm:grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 hide-scrollbar snap-x snap-mandatory pb-2 -mx-4 px-4 sm:mx-0 sm:px-0"
+                        onMouseDown={handleFeaturedMouseDown}
+                        onMouseMove={handleFeaturedMouseMove}
+                        onMouseUp={handleFeaturedMouseUp}
+                        onMouseLeave={handleFeaturedMouseUp}
+                        className="flex overflow-x-auto gap-4 sm:gap-6 hide-scrollbar snap-x snap-mandatory pb-4 pt-2 -mx-4 px-4 sm:mx-0 sm:px-0 scroll-smooth items-stretch cursor-grab active:cursor-grabbing select-none"
                       >
                       {(ribbonCollections.length > 0 
                         ? ribbonCollections 
@@ -878,7 +1032,14 @@ export default function Home() {
                         const descColor = (custom && collection.cardDescriptionColor) ? collection.cardDescriptionColor : (collection.descriptionColor || defaultDescColor);
 
                         return (
-                          <div key={collection.tag} className="relative group shrink-0 w-[82vw] sm:w-auto snap-center">
+                          <div 
+                            key={collection.tag} 
+                            className={`relative group shrink-0 w-[82vw] sm:w-[calc(50%-12px)] ${
+                              (ribbonCollections.length === 0 ? 3 : ribbonCollections.length) <= 2 && !editMode 
+                                ? 'lg:w-[calc(50%-12px)]' 
+                                : 'lg:w-[calc((100%-3rem)/3)]'
+                            } snap-start`}
+                          >
                             {editMode && adminUser && (
                               <div className="absolute top-3 left-3 z-20 flex gap-1">
                                 <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveRibbon(index, -1); }} className="bg-black text-white p-2 rounded-full hover:bg-neutral-800 shadow-md transition-transform hover:scale-110 disabled:opacity-50" disabled={index === 0} title="Move Left">
@@ -891,6 +1052,11 @@ export default function Home() {
                             )}
                             <Link 
                               href={`/collections/${collection.tag}`} 
+                              onClick={(e) => {
+                                if (featuredDragDistanceRef.current > 5) {
+                                  e.preventDefault();
+                                }
+                              }}
                               className={`relative h-64 sm:h-80 lg:h-96 rounded-2xl sm:rounded-[2rem] overflow-hidden shadow-lg block transform transition-all duration-500 hover:-translate-y-1.5 hover:shadow-2xl z-0 ${isLight ? 'border border-pink-200/80 shadow-pink-100/40' : 'border border-pink-100/20'}`}
                             >
                               <div 
@@ -952,7 +1118,7 @@ export default function Home() {
                         {editMode && adminUser && (
                           <div 
                             onClick={() => setShowFeaturePicker(true)}
-                            className="shrink-0 w-[82vw] sm:w-auto snap-center h-64 sm:h-80 lg:h-96 rounded-2xl sm:rounded-[2rem] border-2 border-dashed border-pink-300 hover:border-pink-500 bg-pink-50/50 hover:bg-pink-100 cursor-pointer flex flex-col items-center justify-center transition-all group shadow-sm hover:shadow-md"
+                            className="shrink-0 w-[82vw] sm:w-[calc(50%-12px)] lg:w-[calc((100%-3rem)/3)] snap-start h-64 sm:h-80 lg:h-96 rounded-2xl sm:rounded-[2rem] border-2 border-dashed border-pink-300 hover:border-pink-500 bg-pink-50/50 hover:bg-pink-100 cursor-pointer flex flex-col items-center justify-center transition-all group shadow-sm hover:shadow-md"
                           >
                             <div className="w-12 h-12 sm:w-16 sm:h-16 bg-white rounded-full flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform mb-3 sm:mb-4">
                               <span className="text-2xl sm:text-3xl text-pink-500 font-light">+</span>
@@ -1381,36 +1547,76 @@ export default function Home() {
         {/* Collection Feature Picker Modal */}
         {showFeaturePicker && (
           <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowFeaturePicker(false)} />
-            <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden text-black animate-slide-up flex flex-col max-h-[80vh]">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowFeaturePicker(false)} />
+            <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden text-black animate-slide-up flex flex-col max-h-[85vh]">
               <div className="bg-white border-b px-6 py-4 flex items-center justify-between z-10">
-                <h2 className="font-brand font-bold text-lg tracking-tight text-neutral-900 uppercase">Feature Collection</h2>
+                <div>
+                  <h2 className="font-brand font-bold text-lg tracking-tight text-neutral-900 uppercase">Feature Collection</h2>
+                  <p className="text-xs text-neutral-500 font-medium">Currently {ribbonCollections.length} featured collection{ribbonCollections.length === 1 ? '' : 's'}</p>
+                </div>
                 <button onClick={() => setShowFeaturePicker(false)} className="text-neutral-400 hover:text-black text-2xl font-bold leading-none">&times;</button>
               </div>
-              <div className="p-4 overflow-y-auto flex-1 bg-neutral-50">
-                {allCollections.filter(c => !c.isFeatured && c.tag !== '--ribbon_layout--').length === 0 ? (
-                  <div className="text-center p-8 text-neutral-400 font-medium">All available collections are already featured.</div>
+
+              {/* Create & Feature New Collection */}
+              <div className="p-4 bg-pink-50/70 border-b border-pink-100">
+                <span className="block text-xs font-bold uppercase tracking-wider text-neutral-700 mb-1.5">
+                  Create & Feature New Collection
+                </span>
+                <form onSubmit={handleCreateAndFeatureCollection} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newCollectionName}
+                    onChange={(e) => setNewCollectionName(e.target.value)}
+                    placeholder="e.g. Autumn Vibes, Spooky Sets..."
+                    className="flex-1 px-3.5 py-2.5 bg-white border border-pink-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!newCollectionName.trim() || creatingCollection}
+                    className="px-4 py-2.5 bg-neutral-900 hover:bg-neutral-800 disabled:opacity-40 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition shadow"
+                  >
+                    {creatingCollection ? "Adding..." : "+ Create"}
+                  </button>
+                </form>
+              </div>
+
+              {/* Existing Collections & Product Tags List */}
+              <div className="p-4 overflow-y-auto flex-1 bg-neutral-50 flex flex-col gap-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-neutral-500">
+                  Or Choose Existing Collection / Tag
+                </span>
+
+                {availableToFeature.length > 4 && (
+                  <input
+                    type="text"
+                    value={collectionSearchQuery}
+                    onChange={(e) => setCollectionSearchQuery(e.target.value)}
+                    placeholder="Search existing collections or tags..."
+                    className="w-full px-3 py-2 bg-white border border-neutral-200 rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-pink-400"
+                  />
+                )}
+
+                {filteredAvailable.length === 0 ? (
+                  <div className="text-center py-6 px-4 text-neutral-400 text-xs font-medium">
+                    {collectionSearchQuery 
+                      ? "No matching collections found." 
+                      : "All known collections are already featured. Use the input above to create a new one!"}
+                  </div>
                 ) : (
                   <div className="space-y-2">
-                    {allCollections.filter(c => !c.isFeatured && c.tag !== '--ribbon_layout--').map(c => (
+                    {filteredAvailable.map(c => (
                       <button
                         key={c.tag}
-                        onClick={async () => {
-                          const vendorUid = VENDOR_UID;
-                          const canonical = ['sets', 'minis', 'keychains', 'earrings', 'accessories', 'basics', 'special-offers', 'all'].includes(c.tag.toLowerCase()) ? c.tag.toLowerCase() : c.tag;
-                          await setDoc(doc(db, 'users', vendorUid, 'collection_settings', canonical), { isFeatured: true }, { merge: true });
-                          const updated = { ...c, tag: canonical, isFeatured: true };
-                          setRibbonCollections((prev: any) => [...prev.filter((item: any) => item.tag.toLowerCase() !== canonical), updated]);
-                          setAllCollections((prev: any) => prev.map((item: any) => item.tag.toLowerCase() === canonical ? updated : item));
-                          setShowFeaturePicker(false);
-                        }}
-                        className="w-full text-left p-4 bg-white border rounded-xl hover:border-pink-300 hover:bg-pink-50 transition-colors flex items-center justify-between group"
+                        onClick={() => handleFeatureExistingCollection(c)}
+                        className="w-full text-left p-3.5 bg-white border border-neutral-200 hover:border-pink-300 hover:bg-pink-50/50 rounded-xl transition flex items-center justify-between group shadow-sm"
                       >
                         <div>
-                          <h3 className="font-bold text-lg">{c.title || c.tag}</h3>
-                          {c.description && <p className="text-xs text-neutral-500 line-clamp-1">{c.description}</p>}
+                          <h3 className="font-bold text-sm text-neutral-900 capitalize">{c.title || c.tag}</h3>
+                          <p className="text-[11px] text-neutral-500 line-clamp-1">{c.description || `tag: ${c.tag}`}</p>
                         </div>
-                        <span className="text-pink-500 font-bold opacity-0 group-hover:opacity-100 transition-opacity">Add +</span>
+                        <span className="text-xs font-bold text-pink-600 bg-pink-50 group-hover:bg-pink-100 px-2.5 py-1 rounded-full transition">
+                          Add +
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -2010,8 +2216,12 @@ export default function Home() {
                           onClick={async () => {
                             const vendorUid = VENDOR_UID;
                             await setDoc(doc(db, 'users', vendorUid, 'collection_settings', editData.tag), { isFeatured: false }, { merge: true });
-                            setRibbonCollections((prev: any) => prev.filter((c: any) => c.tag.toLowerCase() !== editData.tag.toLowerCase()));
+                            const remaining = ribbonCollections.filter((c: any) => c.tag.toLowerCase() !== editData.tag.toLowerCase());
+                            setRibbonCollections(remaining);
                             setAllCollections((prev: any) => prev.map((c: any) => c.tag.toLowerCase() === editData.tag.toLowerCase() ? { ...c, isFeatured: false } : c));
+                            await setDoc(doc(db, 'users', vendorUid, 'store_settings', 'featured_order'), {
+                              order: remaining.map((c: any) => c.tag)
+                            }, { merge: true });
                             setShowEditor(false);
                           }}
                           className="w-full py-3 text-red-500 font-bold hover:bg-red-50 rounded-xl transition-colors text-sm"
