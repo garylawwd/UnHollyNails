@@ -1661,16 +1661,13 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => setEditorTab('card')}
-                    className={`py-3 px-3 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
+                    className={`py-3 px-3 text-xs font-bold border-b-2 transition-all ${
                       editorTab === 'card'
                         ? 'border-pink-500 text-pink-600 bg-white -mb-px rounded-t-lg'
                         : 'border-transparent text-neutral-500 hover:text-neutral-900'
                     }`}
                   >
                     <span>Featured Card</span>
-                    {editData.customCardColors && (
-                      <span className="w-2 h-2 rounded-full bg-pink-500" title="Custom card colors active" />
-                    )}
                   </button>
                   <button
                     type="button"
